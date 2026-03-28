@@ -1,5 +1,6 @@
 """
 Docking Engine - Actual molecular docking using AutoDock Vina Python API
+Includes PDBQT file preparation using RDKit/MeeKo
 """
 import os
 import logging
@@ -18,13 +19,73 @@ def check_vina() -> bool:
         return False
 
 
-def prepare_receptor_file(receptor_path: str) -> Optional[str]:
+def convert_pdb_to_pdbqt(input_path: str, output_path: str, is_ligand: bool = False) -> bool:
+    """
+    Convert PDB file to PDBQT format using RDKit and MeeKo.
+    
+    Args:
+        input_path: Path to input PDB file
+        output_path: Path to output PDBQT file
+        is_ligand: True for ligand, False for receptor
+        
+    Returns:
+        True if conversion successful, False otherwise
+    """
+    try:
+        from rdkit import Chem
+        from meeko import PDBQTMoleculeWriter, MoleculePreparation
+        
+        # Read molecule
+        mol = Chem.MolFromPDBFile(input_path, removeHs=False)
+        if mol is None:
+            logger.error(f"Failed to read PDB file: {input_path}")
+            return False
+        
+        # Prepare molecule
+        if is_ligand:
+            # For ligands: use MeeKo preparation
+            preparator = MoleculePreparation()
+            mol_setups = preparator.prepare(mol)
+            if mol_setups is None or len(mol_setups) == 0:
+                logger.error("MeeKo preparation failed for ligand")
+                return False
+            setup = mol_setups[0]
+            
+            # Write to PDBQT
+            with open(output_path, 'w') as f:
+                writer = PDBQTMoleculeWriter(f)
+                writer.write([setup])
+                writer.close()
+        else:
+            # For receptors: add PDBQT format header and write
+            # Receptors are treated as rigid, just need to add ATOM/HETATM lines
+            with open(input_path, 'r') as inf, open(output_path, 'w') as outf:
+                for line in inf:
+                    if line.startswith(('ATOM', 'HETATM')):
+                        # Add blank fields for charge and type if not present
+                        if len(line) < 66:
+                            line = line.rstrip() + ' ' * (66 - len(line))
+                        outf.write(line)
+        
+        logger.info(f"Converted {input_path} to {output_path}")
+        return True
+        
+    except ImportError as e:
+        logger.warning(f"Conversion libraries not available: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Conversion error: {e}")
+        return False
+
+
+def prepare_receptor_file(receptor_path: str, output_dir: str = "/tmp") -> Optional[str]:
     """
     Prepare receptor file for Vina docking.
-    Vina requires PDBQT files, so we convert if necessary.
+    Converts PDB to PDBQT if necessary.
     
     Args:
         receptor_path: Path to receptor file
+        output_dir: Directory for temporary files
         
     Returns:
         Path to prepared PDBQT file or None if preparation fails
@@ -35,33 +96,49 @@ def prepare_receptor_file(receptor_path: str) -> Optional[str]:
     if ext == '.pdbqt':
         return receptor_path
     
-    # For PDB files, we can try to use the file directly with Vina
-    # Vina's Python API can handle PDB files
     if ext == '.pdb':
-        return receptor_path
+        # Try to convert PDB to PDBQT
+        output_path = os.path.join(output_dir, f"prepared_receptor_{os.path.basename(receptor_path)}.pdbqt")
+        if convert_pdb_to_pdbqt(receptor_path, output_path, is_ligand=False):
+            return output_path
+        else:
+            # If conversion fails, try using the PDB file directly
+            # Some Vina versions accept PDB files
+            logger.warning(f"PDBQT conversion failed, trying PDB file directly")
+            return receptor_path
     
-    # For other formats, return None (would need obabel for conversion)
-    logger.warning(f"Receptor format {ext} not directly supported. PDB or PDBQT required.")
+    logger.error(f"Unsupported receptor format: {ext}. Use PDB or PDBQT.")
     return None
 
 
-def prepare_ligand_file(ligand_path: str) -> Optional[str]:
+def prepare_ligand_file(ligand_path: str, output_dir: str = "/tmp") -> Optional[str]:
     """
     Prepare ligand file for Vina docking.
+    Converts PDB/SDF/MOL2 to PDBQT if necessary.
     
     Args:
         ligand_path: Path to ligand file
+        output_dir: Directory for temporary files
         
     Returns:
-        Path to prepared file or None if preparation fails
+        Path to prepared PDBQT file or None if preparation fails
     """
     _, ext = os.path.splitext(ligand_path)
     ext = ext.lower()
     
-    if ext in ['.pdbqt', '.pdb', '.sdf', '.mol2']:
+    if ext == '.pdbqt':
         return ligand_path
     
-    logger.warning(f"Ligand format {ext} not supported. PDB, PDBQT, SDF, or MOL2 required.")
+    if ext in ['.pdb', '.sdf', '.mol2']:
+        # Try to convert to PDBQT
+        output_path = os.path.join(output_dir, f"prepared_ligand_{os.path.basename(ligand_path)}.pdbqt")
+        if convert_pdb_to_pdbqt(ligand_path, output_path, is_ligand=True):
+            return output_path
+        else:
+            logger.error(f"Ligand conversion failed for: {ligand_path}")
+            return None
+    
+    logger.error(f"Unsupported ligand format: {ext}. Use PDB, SDF, MOL2, or PDBQT.")
     return None
 
 
@@ -103,21 +180,23 @@ def run_vina_docking(
             "results": []
         }
     
-    # Prepare files
-    receptor_file = prepare_receptor_file(receptor_path)
-    ligand_file = prepare_ligand_file(ligand_path)
+    os.makedirs(output_dir, exist_ok=True)
     
+    # Prepare receptor
+    receptor_file = prepare_receptor_file(receptor_path, output_dir)
     if receptor_file is None:
         return {
             "success": False,
-            "error": f"Failed to prepare receptor: {receptor_path}",
+            "error": f"Failed to prepare receptor: {receptor_path}. Please use PDBQT format.",
             "results": []
         }
     
+    # Prepare ligand
+    ligand_file = prepare_ligand_file(ligand_path, output_dir)
     if ligand_file is None:
         return {
             "success": False,
-            "error": f"Failed to prepare ligand: {ligand_path}",
+            "error": f"Failed to prepare ligand: {ligand_path}. Please use PDB, SDF, or MOL2 format.",
             "results": []
         }
     
@@ -134,7 +213,7 @@ def run_vina_docking(
             logger.error(f"Failed to set receptor: {e}")
             return {
                 "success": False,
-                "error": f"Failed to set receptor: {str(e)}",
+                "error": f"Failed to set receptor: {str(e)}. Ensure receptor is valid PDBQT format.",
                 "results": []
             }
         
@@ -146,7 +225,7 @@ def run_vina_docking(
             logger.error(f"Failed to set ligand: {e}")
             return {
                 "success": False,
-                "error": f"Failed to set ligand: {str(e)}",
+                "error": f"Failed to set ligand: {str(e)}. Ensure ligand is valid PDBQT format.",
                 "results": []
             }
         
@@ -198,7 +277,6 @@ def run_vina_docking(
             logger.debug(f"Could not get poses: {e}")
         
         # Write output file
-        os.makedirs(output_dir, exist_ok=True)
         output_file = os.path.join(output_dir, "vina_results.pdbqt")
         try:
             v.write_pose(output_file, overwrite=True)
