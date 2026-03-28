@@ -1,10 +1,7 @@
 # BioDockify Docking Studio - All-in-One Docker Image
 # Using supervisor approach similar to Agent Zero for stable startup
 
-# Stage 1: GNINA build (from pre-built image)
-FROM gnina/gnina:latest AS gnina-stage
-
-# Stage 2: Build React frontend
+# Stage 1: Build React frontend
 FROM node:20-alpine AS frontend-builder
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -12,11 +9,11 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 3: Final Image (CPU + GPU)
+# Stage 2: Final Image (CPU only - Vina)
 FROM python:3.11-slim
 
 LABEL maintainer="BioDockify"
-LABEL description="Docking Studio - GPU auto-detection with Vina+GNINA+RF+ODDT pipeline"
+LABEL description="Docking Studio - Vina molecular docking with RDKit analysis"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1 \
@@ -39,17 +36,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies in correct order
+# Install Python dependencies
 RUN pip install --no-cache-dir \
     six && \
     pip install --no-cache-dir \
     vina \
     rdkit \
-    meeko \
-    oddt
-
-# Copy GNINA from gnina stage
-COPY --from=gnina-stage /usr/local/bin/gnina /usr/local/bin/gnina
+    meeko
 
 # Set working directory
 WORKDIR /app

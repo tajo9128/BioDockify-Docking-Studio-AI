@@ -51,7 +51,21 @@ export function Docking() {
       const jobId = `docking-${Date.now()}`
       setCurrentJobId(jobId)
 
-      await startDocking(jobId, config.batch_size)
+      // For now, use placeholder paths - in production, upload files first
+      const receptorPath = `/uploads/${receptorFile.name}`
+      const ligandPath = `/uploads/${ligandFiles[0].name}`
+
+      await startDocking(jobId, config.batch_size, receptorPath, ligandPath, {
+        center_x: config.center_x,
+        center_y: config.center_y,
+        center_z: config.center_z,
+        size_x: config.size_x,
+        size_y: config.size_y,
+        size_z: config.size_z,
+        exhaustiveness: config.exhaustiveness,
+        num_modes: config.num_modes,
+        engine: config.engine
+      })
       setActiveTab('progress')
     } catch (err) {
       console.error('Failed to start docking:', err)

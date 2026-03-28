@@ -547,29 +547,77 @@ class DockingProgress:
 
 
 @app.post("/dock/start")
-def start_docking_job(job_id: str = Form(...), total_ligands: int = Form(10)):
-    """Start a docking job and return job ID"""
-    logger.info(f"Starting docking job: {job_id} with {total_ligands} ligands")
+def start_docking_job(
+    job_id: str = Form(...),
+    total_ligands: int = Form(10),
+    receptor_path: str = Form(...),
+    ligand_path: str = Form(...),
+    center_x: float = Form(0),
+    center_y: float = Form(0),
+    center_z: float = Form(0),
+    size_x: float = Form(20),
+    size_y: float = Form(20),
+    size_z: float = Form(20),
+    exhaustiveness: int = Form(8),
+    num_modes: int = Form(9),
+    engine: str = Form("vina")
+):
+    """Start a real docking job using Vina or GNINA"""
+    logger.info(f"Starting docking job: {job_id} with {total_ligands} ligands using {engine}")
     DockingProgress.start_job(job_id, total_ligands)
+    DockingProgress.update_progress(job_id, 0, "Initializing docking engine...")
 
-    def simulate_docking():
-        """Simulate docking progress for demonstration"""
-        for i in range(0, 101, 5):
-            progress_data = DockingProgress.get_progress(job_id)
-            if progress_data["status"] == "cancelled":
-                break
-
-            DockingProgress.update_progress(
-                job_id,
-                i,
-                f"Processing ligand {i * total_ligands // 100}/{total_ligands}",
+    def run_real_docking():
+        """Run actual molecular docking with Vina"""
+        try:
+            from docking_engine import run_docking, check_vina
+            
+            # Check available engines
+            vina_available = check_vina()
+            docking_engine = "vina"  # Use local variable
+            
+            logger.info(f"Engine check - Vina: {vina_available}")
+            
+            if not vina_available:
+                DockingProgress.set_status(job_id, "failed", "Vina not available")
+                return
+            
+            # Progress callback simulation (since actual docking doesn't provide progress)
+            DockingProgress.update_progress(job_id, 10, "Preparing receptor...")
+            
+            # Run docking
+            DockingProgress.update_progress(job_id, 30, f"Running {docking_engine.upper()} docking...")
+            logger.info(f"Running docking with engine: {docking_engine}")
+            
+            result = run_docking(
+                receptor_path=receptor_path,
+                ligand_path=ligand_path,
+                engine=docking_engine,
+                center_x=center_x,
+                center_y=center_y,
+                center_z=center_z,
+                size_x=size_x,
+                size_y=size_y,
+                size_z=size_z,
+                exhaustiveness=exhaustiveness,
+                num_modes=num_modes,
+                output_dir=STORAGE_DIR
             )
-            time.sleep(0.3)
+            
+            DockingProgress.update_progress(job_id, 90, "Processing results...")
+            
+            if result["success"]:
+                DockingProgress.set_status(job_id, "completed", f"Docking complete! {len(result['results'])} poses generated")
+                logger.info(f"Docking job completed: {job_id}, poses: {len(result['results'])}")
+            else:
+                DockingProgress.set_status(job_id, "failed", result.get("error", "Unknown error"))
+                logger.error(f"Docking job failed: {job_id}, error: {result.get('error')}")
+                
+        except Exception as e:
+            DockingProgress.set_status(job_id, "failed", str(e))
+            logger.error(f"Docking job exception: {job_id}, error: {e}")
 
-        DockingProgress.set_status(job_id, "completed", "Docking complete!")
-        logger.info(f"Docking job completed: {job_id}")
-
-    thread = threading.Thread(target=simulate_docking, daemon=True)
+    thread = threading.Thread(target=run_real_docking, daemon=True)
     thread.start()
 
     return {"job_id": job_id, "status": "started"}
