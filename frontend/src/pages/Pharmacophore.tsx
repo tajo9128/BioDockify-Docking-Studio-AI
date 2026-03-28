@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, Button, Badge, Tabs, TabPanel, Input, Select } from '@/components/ui'
+import { Card, Button, Badge, Tabs, TabPanel } from '@/components/ui'
 import { PharmacophoreViewer3D, FEATURE_INFO } from '@/components/PharmacophoreViewer'
 import { Molecule2DViewer } from '@/components/Molecule2DViewer'
 import { 
@@ -27,7 +27,7 @@ export function Pharmacophore() {
   const [error, setError] = useState<string | null>(null)
   
   // Screening state
-  const [library, setLibrary] = useState<string[]>(SAMPLE_LIBRARY)
+  const [library] = useState<string[]>(SAMPLE_LIBRARY)
   const [screeningResults, setScreeningResults] = useState<any>(null)
   const [minFeatures, setMinFeatures] = useState(3)
   

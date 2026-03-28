@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Molecule2DViewer, SAMPLE_SMILES } from './Molecule2DViewer'
 
 interface Feature {
   type: string
@@ -41,7 +40,7 @@ export function PharmacophoreViewer3D({
   const containerRef = useRef<HTMLDivElement>(null)
   const viewerRef = useRef<any>(null)
   const [loaded, setLoaded] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error] = useState<string | null>(null)
 
   useEffect(() => {
     if (!containerRef.current || !window.$3Dmol) return
@@ -85,8 +84,6 @@ export function PharmacophoreViewer3D({
 
     // If we have a molecule, style it as cartoon
     if (showMolecule && features.length > 0) {
-      // Style the molecule part (atoms after features)
-      const startIdx = features.length
       viewer.addStyle(
         { atom: { resn: 'LIG' } },
         { stick: {}, cartoon: { color: 'spectrum' } }
@@ -187,7 +184,7 @@ function generatePharmacophorePDB(features: Feature[]): string {
 }
 
 // Generate simple PDB for molecule (placeholder)
-function generateMoleculePDB(smiles: string): string {
+function generateMoleculePDB(_smiles: string): string {
   // This would normally use RDKit to generate proper 3D coords
   // For now, return a simple placeholder
   return `

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Card, Tabs, TabPanel, Badge, DataTable, Button, ProgressBar } from '@/components/ui'
+import { Card, Tabs, TabPanel, Badge, DataTable, Button } from '@/components/ui'
 import { useJob, useJobResults, useJobInteractions } from '@/hooks/useJobs'
 import { jsPDF } from 'jspdf'
 
@@ -13,7 +13,7 @@ export function Results() {
   const jobUuid = searchParams.get('job')
 
   const { data: job, isLoading: jobLoading } = useJob(jobUuid)
-  const { data: resultsData, isLoading: resultsLoading } = useJobResults(jobUuid)
+  const { data: resultsData } = useJobResults(jobUuid)
   const { data: interactionsData } = useJobInteractions(jobUuid, selectedPose)
 
   const results = resultsData?.results || []
@@ -160,7 +160,7 @@ export function Results() {
                         onClick={() => setSelectedPose(result.pose_id)}
                       >
                         <div className="flex items-center gap-3">
-                          <Badge variant={selectedPose === result.pose_id ? 'primary' : 'default'}>
+                          <Badge variant={selectedPose === result.pose_id ? 'success' : 'default'}>
                             Pose {result.pose_id}
                           </Badge>
                           <span className="text-sm text-text-secondary">
@@ -232,7 +232,7 @@ export function Results() {
                     {interactions.map((interaction, idx) => (
                       <div key={idx} className="flex items-center justify-between p-3 bg-surface-secondary rounded-lg">
                         <div className="flex items-center gap-3">
-                          <Badge variant={interactionTypeColors[interaction.interaction_type] || 'default'}>
+                          <Badge variant={(interactionTypeColors[interaction.interaction_type] as any) || 'default'}>
                             {interaction.interaction_type.replace('_', ' ')}
                           </Badge>
                           <span className="text-sm font-mono">
@@ -313,7 +313,7 @@ export function Results() {
                     doc.text(`Job: ${job?.job_name || 'Unknown'}`, 20, 35)
                     doc.text(`Best Score: ${bestResult?.vina_score?.toFixed(2) || 'N/A'} kcal/mol`, 20, 45)
                     let y = 60
-                    results.forEach((r, idx) => {
+                    results.forEach((r, _idx) => {
                       doc.text(`Pose ${r.pose_id}: ${r.vina_score?.toFixed(2) || 'N/A'} kcal/mol`, 20, y)
                       y += 10
                     })

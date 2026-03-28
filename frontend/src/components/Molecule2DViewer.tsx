@@ -10,7 +10,6 @@ interface Molecule2DViewerProps {
 export function Molecule2DViewer({ smiles, width = 300, height = 200, className = '' }: Molecule2DViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [error, setError] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     if (!canvasRef.current || !smiles) return
@@ -18,7 +17,8 @@ export function Molecule2DViewer({ smiles, width = 300, height = 200, className 
     const drawMolecule = async () => {
       try {
         // Dynamically import smiles-drawer
-        const SmilesDrawer = (await import('smiles-drawer')).default
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const SmilesDrawer = (await import('smiles-drawer')).default as any
         
         const drawer = new SmilesDrawer.Drawer({
           width,
@@ -52,7 +52,6 @@ export function Molecule2DViewer({ smiles, width = 300, height = 200, className 
         SmilesDrawer.parse(smiles, (tree: any) => {
           try {
             drawer.draw(tree, canvasRef.current!, 'light', false)
-            setLoaded(true)
             setError(null)
           } catch (e) {
             setError('Failed to draw molecule')
