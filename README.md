@@ -1,8 +1,24 @@
-# 🧬 Docking Studio v2.0
+# 🧬 Docking Studio v2.1
 
 **Local-first AI Drug Discovery Studio** — runs in your browser at `http://localhost:8000`.
 
 Built with microservices architecture + Nanobot Brain AI agent. One-command startup via Docker Desktop.
+
+### Architecture
+
+```
+Gateway (nginx) ──► API Backend ──► Docking Service (Vina)
+                           │          RDKit Service
+                           │          Pharmacophore Service
+                           │          QSAR Service
+                           │          MD Service (OpenMM)
+                           │          Sentinel Service (watchdog)
+                           │          Analysis Service
+                           │
+                           ▼
+                    Redis (queue) ──► Celery Worker
+                    PostgreSQL (persistence)
+```
 
 ---
 

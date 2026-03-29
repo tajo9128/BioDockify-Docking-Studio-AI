@@ -493,6 +493,7 @@ services:
       - uploads:/app/uploads
     environment:
       - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
       - REDIS_URL=redis://redis:6379
       - DATABASE_URL=postgresql://dockuser:dockpass@postgres:5432/docking
       - AI_MODE=autonomous
@@ -500,6 +501,7 @@ services:
       - RDKIT_SERVICE_URL=http://rdkit-service:8000
       - PHARMACOPHORE_SERVICE_URL=http://pharmacophore-service:8000
       - MD_SERVICE_URL=http://md-service:8000
+      - ANALYSIS_SERVICE_URL=http://analysis-service:8000
     depends_on:
       redis:
         condition: service_healthy

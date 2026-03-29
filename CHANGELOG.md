@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.1.0] - 2026-03-29
+
+### Added
+
+- **QSAR Modeling Service** (`qsar-service`) — ML-based QSAR modeling with descriptors, model training, prediction, and ADMET checks
+- **Molecular Dynamics Service** (`md-service`) — OpenMM-based MD simulation with NPT ensemble, analysis modules (RMSD, RMSF, Energy, Gyration, SASA, H-bonds), and publication packager
+- **Sentinel Service** (`sentinel-service`) — Job supervisor with watchdog polling loop, automatic retry with exponential backoff, and fallback strategies
+- **Analysis Service** (`analysis-service`) — Insight generator for ranking, consensus scoring, ADMET filtering, pose comparison, and interaction analysis
+- **Nanobot Memory System** — PostgreSQL-backed persistent memory with user profiles, conversation history, and context-aware recall
+- **Nanobot Notification Channels** — 6 notification channels (Telegram, Discord, Slack, Email, WhatsApp, Feishu)
+- **Structured JSON Logging** — All services now emit JSON logs with `job_id`, `service`, `step`, `status`, `duration_ms` for end-to-end tracing
+- **Prometheus Metrics Endpoint** — `/metrics` endpoint exposing job counts, service health, and Redis stats
+- **Celery Separate Queues** — Separate queues for `docking`, `rdkit`, `pharmacophore`, `md`, and `analysis` with dedicated worker concurrency
+
+### Changed
+
+- **Brain Service LLM Temperature** — Set to 0.0 for deterministic, reproducible plan generation
+- **Docker Security Hardening** — Non-root user (`appuser`) on all services, healthchecks on all containers
+- **nginx Security** — Rate limiting (10r/s API, 1r/s uploads), CORS headers, security headers (X-Frame-Options, X-Content-Type-Options, XSS-Protection)
+
+### Fixed
+
+- **Gateway build context** — Fixed `../../frontend` path issue by changing build context to repo root
+- **Relative imports** — Fixed `from .module` to `from module` in qsar-service, md-service, api-backend for namespace package compatibility
+- **SQLAlchemy reserved attribute** — `metadata` column renamed to `extra_data` in MemoryEntry and ConversationHistory models
+- **Missing imports** — Added missing `Form`, `Dict`, `Any` imports in api-backend
+- **Nginx permission denied** — Removed non-root user from nginx alpine container to fix `/var/run/nginx.pid` permission issues
+
 ## [2.0.1] - 2026-03-29
 
 ### Fixed

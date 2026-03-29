@@ -4,7 +4,9 @@ Main gateway that routes requests to specialized services
 """
 
 import os
+import json
 import logging
+import redis
 from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 from pathlib import Path
@@ -20,7 +22,7 @@ from fastapi import (
     Form,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import httpx
@@ -2166,3 +2168,80 @@ async def analyze_interactions(receptor_pdb: str, ligand_pdb: str):
             "num_hbonds": 0,
             "num_hydrophobic": 0,
         }
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """Prometheus-compatible metrics endpoint"""
+    try:
+        r = redis.from_url(REDIS_URL, decode_responses=True)
+        info = r.info()
+
+        job_keys = [
+            "job:*",
+            "docking_job:*",
+            "md_job:*",
+            "qsar_job:*",
+            "pharmacophore_job:*",
+        ]
+        total_jobs = 0
+        running = 0
+        completed = 0
+        failed = 0
+        pending = 0
+
+        for pattern in job_keys:
+            for key in r.scan_iter(pattern, count=100):
+                total_jobs += 1
+                data = r.get(key)
+                if data:
+                    try:
+                        job = json.loads(data)
+                        status = job.get("status", "")
+                        if status == "running":
+                            running += 1
+                        elif status == "completed":
+                            completed += 1
+                        elif status == "failed":
+                            failed += 1
+                        else:
+                            pending += 1
+                    except:
+                        pass
+
+        docker_services = [
+            "api-backend",
+            "brain-service",
+            "docking-service",
+            "rdkit-service",
+            "pharmacophore-service",
+            "qsar-service",
+            "md-service",
+            "sentinel-service",
+            "analysis-service",
+        ]
+        healthy_services = len([s for s in docker_services if r.exists(f"health:{s}")])
+
+        metrics_text = f"""# HELP docking_jobs_total Total number of jobs
+# TYPE docking_jobs_total gauge
+docking_jobs_total {total_jobs}
+docking_jobs_running {running}
+docking_jobs_completed {completed}
+docking_jobs_failed {failed}
+docking_jobs_pending {pending}
+
+# HELP docking_services_healthy Number of healthy services
+# TYPE docking_services_healthy gauge
+docking_services_healthy {healthy_services}
+
+# HELP redis_connected_clients Number of connected Redis clients
+# TYPE redis_connected_clients gauge
+redis_connected_clients {info.get("connected_clients", 0)}
+
+# HELP redis_used_memory_human Redis memory usage
+# TYPE redis_used_memory_human gauge
+redis_used_memory_human {info.get("used_memory_human", "0")}
+"""
+        return Response(content=metrics_text, media_type="text/plain")
+    except Exception as e:
+        return Response(content=f"# Error: {e}", media_type="text/plain")
