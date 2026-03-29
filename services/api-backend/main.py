@@ -1751,7 +1751,13 @@ async def get_stats():
 
     try:
         r = redis.from_url(REDIS_URL)
-        total_jobs = len(r.keys("job:*")) + len(r.keys("docking_job:*"))
+        total_jobs = (
+            len(r.keys("job:*"))
+            + len(r.keys("docking_job:*"))
+            + len(r.keys("md_job:*"))
+            + len(r.keys("qsar_job:*"))
+            + len(r.keys("pharmacophore_job:*"))
+        )
 
         stats = {
             "total_jobs": total_jobs,
