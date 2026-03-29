@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import redis
+import httpx
 
 from .md_analysis import (
     RMSDAnalyzer,
@@ -43,6 +44,7 @@ ANALYSIS_DIR = STORAGE_DIR / "analysis"
 ANALYSIS_DIR.mkdir(parents=True, exist_ok=True)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
+API_BACKEND_URL = os.getenv("API_BACKEND_URL", "http://api-backend:8000")
 
 try:
     redis_client = redis.from_url(REDIS_URL, decode_responses=True)
@@ -82,6 +84,30 @@ def _get_job_status(job_id: str) -> Optional[Dict]:
         return None
     data = redis_client.get(f"md_job:{job_id}")
     return json.loads(data) if data else None
+
+
+def _persist_to_db(job_id: str, request: "DynamicsRequest", result: Dict[str, Any]):
+    """Persist completed MD job result to PostgreSQL via api-backend."""
+    try:
+        payload = {
+            "job_uuid": job_id,
+            "project_name": request.name,
+            "n_steps": result.get("n_steps"),
+            "sim_time_ns": result.get("sim_time_ns"),
+            "temperature_K": result.get("temperature_K"),
+            "solvent_model": result.get("solvent_model"),
+            "ionic_strength": request.ionic_strength,
+            "n_frames": result.get("n_frames"),
+            "avg_energy_kj_mol": result.get("avg_energy_kj_mol"),
+            "trajectory_path": result.get("trajectory_path"),
+            "final_frame_path": result.get("final_frame_path"),
+            "energy_csv_path": result.get("energy_csv_path"),
+        }
+        with httpx.Client(timeout=10.0) as client:
+            client.post(f"{API_BACKEND_URL}/db/md/save", json=payload)
+        logger.info(f"Persisted MD result to database for job {job_id}")
+    except Exception as e:
+        logger.warning(f"Failed to persist MD result to database: {e}")
 
 
 @asynccontextmanager
@@ -302,6 +328,8 @@ def _run_dynamics(job_id: str, request: DynamicsRequest):
             "solvent_model": request.solvent_model,
         }
         _set_job_status(job_id, "completed", result=result, progress=100)
+
+        _persist_to_db(job_id, request, result)
 
         if request.notify_on_complete:
             notifications.notify_simulation_completed(

@@ -63,7 +63,29 @@ CREATE TABLE IF NOT EXISTS interactions (
 CREATE INDEX IF NOT EXISTS idx_interactions_job ON interactions(job_uuid);
 CREATE INDEX IF NOT EXISTS idx_interactions_type ON interactions(interaction_type);
 
-CREATE TABLE IF EXISTS users (
+CREATE TABLE IF NOT EXISTS md_results (
+    id SERIAL PRIMARY KEY,
+    job_uuid VARCHAR(36) UNIQUE NOT NULL,
+    project_name VARCHAR(255),
+    n_steps INTEGER,
+    sim_time_ns FLOAT,
+    temperature_K FLOAT,
+    solvent_model VARCHAR(50),
+    ionic_strength FLOAT,
+    n_frames INTEGER,
+    avg_energy_kj_mol FLOAT,
+    trajectory_path TEXT,
+    final_frame_path TEXT,
+    energy_csv_path TEXT,
+    analysis_summary JSONB,
+    package_path TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_uuid) REFERENCES jobs(job_uuid) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_md_results_job ON md_results(job_uuid);
+
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,

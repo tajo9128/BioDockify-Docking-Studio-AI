@@ -8,12 +8,17 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional, List
 from pathlib import Path
+from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 import httpx
+
+from .db import engine, get_db, Base
+from .models import Job, MDResult
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,6 +61,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"QSAR Service: {QSAR_SERVICE_URL}")
     logger.info(f"MD Service: {MD_SERVICE_URL}")
     logger.info(f"Brain Service: {BRAIN_SERVICE_URL}")
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables created/verified")
     yield
     logger.info("API Backend shutting down...")
 
@@ -898,6 +905,143 @@ async def md_health():
             return response.json()
         except httpx.HTTPError as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
+# Database endpoints - MD Results (PostgreSQL)
+# ============================================================
+
+
+class MDSaveRequest(BaseModel):
+    job_uuid: str
+    project_name: Optional[str] = "md_project"
+    n_steps: Optional[int] = None
+    sim_time_ns: Optional[float] = None
+    temperature_K: Optional[float] = None
+    solvent_model: Optional[str] = None
+    ionic_strength: Optional[float] = None
+    n_frames: Optional[int] = None
+    avg_energy_kj_mol: Optional[float] = None
+    trajectory_path: Optional[str] = None
+    final_frame_path: Optional[str] = None
+    energy_csv_path: Optional[str] = None
+    analysis_summary: Optional[dict] = None
+    package_path: Optional[str] = None
+
+
+@app.post("/db/md/save")
+def save_md_result(request: MDSaveRequest, db: Session = Depends(get_db)):
+    """Persist MD simulation result to PostgreSQL database."""
+    try:
+        job = db.query(Job).filter(Job.job_uuid == request.job_uuid).first()
+        if not job:
+            job = Job(
+                job_uuid=request.job_uuid,
+                job_name=request.project_name,
+                job_type="md",
+                status="completed",
+                parameters={
+                    "n_steps": request.n_steps,
+                    "temperature_K": request.temperature_K,
+                    "solvent_model": request.solvent_model,
+                    "ionic_strength": request.ionic_strength,
+                },
+                result={
+                    "sim_time_ns": request.sim_time_ns,
+                    "n_frames": request.n_frames,
+                    "avg_energy_kj_mol": request.avg_energy_kj_mol,
+                },
+                completed_at=datetime.utcnow(),
+            )
+            db.add(job)
+        else:
+            job.status = "completed"
+            job.result = {
+                "sim_time_ns": request.sim_time_ns,
+                "n_frames": request.n_frames,
+                "avg_energy_kj_mol": request.avg_energy_kj_mol,
+            }
+            job.completed_at = datetime.utcnow()
+
+        existing_md = (
+            db.query(MDResult).filter(MDResult.job_uuid == request.job_uuid).first()
+        )
+        if existing_md:
+            for key, value in request.model_dump(exclude_none=True).items():
+                setattr(existing_md, key, value)
+        else:
+            md_result = MDResult(
+                job_uuid=request.job_uuid,
+                project_name=request.project_name,
+                n_steps=request.n_steps,
+                sim_time_ns=request.sim_time_ns,
+                temperature_K=request.temperature_K,
+                solvent_model=request.solvent_model,
+                ionic_strength=request.ionic_strength,
+                n_frames=request.n_frames,
+                avg_energy_kj_mol=request.avg_energy_kj_mol,
+                trajectory_path=request.trajectory_path,
+                final_frame_path=request.final_frame_path,
+                energy_csv_path=request.energy_csv_path,
+                analysis_summary=request.analysis_summary,
+                package_path=request.package_path,
+            )
+            db.add(md_result)
+
+        db.commit()
+        return {"success": True, "job_uuid": request.job_uuid}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/db/md/results/{job_uuid}")
+def get_md_result(job_uuid: str, db: Session = Depends(get_db)):
+    """Retrieve MD result from PostgreSQL by job UUID."""
+    md_result = db.query(MDResult).filter(MDResult.job_uuid == job_uuid).first()
+    if not md_result:
+        raise HTTPException(
+            status_code=404, detail=f"MD result for {job_uuid} not found"
+        )
+    return {
+        "job_uuid": md_result.job_uuid,
+        "project_name": md_result.project_name,
+        "n_steps": md_result.n_steps,
+        "sim_time_ns": md_result.sim_time_ns,
+        "temperature_K": md_result.temperature_K,
+        "solvent_model": md_result.solvent_model,
+        "ionic_strength": md_result.ionic_strength,
+        "n_frames": md_result.n_frames,
+        "avg_energy_kj_mol": md_result.avg_energy_kj_mol,
+        "trajectory_path": md_result.trajectory_path,
+        "final_frame_path": md_result.final_frame_path,
+        "energy_csv_path": md_result.energy_csv_path,
+        "analysis_summary": md_result.analysis_summary,
+        "package_path": md_result.package_path,
+        "created_at": md_result.created_at.isoformat()
+        if md_result.created_at
+        else None,
+    }
+
+
+@app.get("/db/jobs")
+def list_db_jobs(limit: int = 50, db: Session = Depends(get_db)):
+    """List all jobs from PostgreSQL database."""
+    jobs = db.query(Job).order_by(Job.created_at.desc()).limit(limit).all()
+    return {
+        "jobs": [
+            {
+                "job_uuid": j.job_uuid,
+                "job_name": j.job_name,
+                "job_type": j.job_type,
+                "status": j.status,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+                "completed_at": j.completed_at.isoformat() if j.completed_at else None,
+            }
+            for j in jobs
+        ],
+        "count": len(jobs),
+    }
 
 
 @app.post("/rdkit/smiles-to-3d")
