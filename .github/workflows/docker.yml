@@ -7,16 +7,6 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Build type'
-        required: true
-        default: 'all'
-        type: choice
-        options:
-          - all
-          - single
-          - full
 
 permissions:
   contents: read
@@ -51,7 +41,6 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
       
       - name: Build and Push Single Container
-        if: github.event.inputs.build_type == 'all' || github.event.inputs.build_type == 'single' || github.event_name != 'workflow_dispatch'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -60,13 +49,10 @@ jobs:
           tags: |
             tajo9128/docking-studio:latest
             tajo9128/docking-studio:${{ steps.version.outputs.VERSION }}
-            biodockify/docking-studio:latest
-            biodockify/docking-studio:${{ steps.version.outputs.VERSION }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       
       - name: Build and Push Full Stack
-        if: github.event.inputs.build_type == 'all' || github.event.inputs.build_type == 'full'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -81,5 +67,5 @@ jobs:
       - name: Show pushed tags
         run: |
           echo "Docker image pushed:"
-          echo "  Single: biodockify/docking-studio:${{ steps.version.outputs.VERSION }}"
-          echo "  Full: tajo9128/docking-studio:full-${{ steps.version.outputs.VERSION }}"
+          echo "  tajo9128/docking-studio:${{ steps.version.outputs.VERSION }}"
+          echo "  tajo9128/docking-studio:full-${{ steps.version.outputs.VERSION }}"
