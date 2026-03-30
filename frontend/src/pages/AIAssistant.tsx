@@ -131,7 +131,7 @@ export function AIAssistant() {
             🧬
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-text-primary">NanoBOT</h1>
+            <h1 className="text-2xl font-bold text-text-primary">BioDockify AI</h1>
             <p className="text-xs text-text-secondary">
               AI Drug Discovery Assistant {status?.provider ? `• ${status.provider}` : ''}
             </p>
@@ -153,7 +153,7 @@ export function AIAssistant() {
       {/* Help Panel */}
       {showHelp && (
         <Card padding="md" className="mb-4 bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200">
-          <h3 className="font-bold text-text-primary mb-2">🚀 Quick Start with NanoBOT</h3>
+          <h3 className="font-bold text-text-primary mb-2">🚀 Quick Start with BioDockify AI</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
             {EXAMPLE_WORKFLOWS.map((wf) => (
               <div key={wf.title} className="bg-white/60 rounded-lg p-3">
@@ -202,7 +202,7 @@ export function AIAssistant() {
           {messages.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-6xl mb-3">🧬</div>
-              <h2 className="text-xl font-bold text-text-primary mb-2">Welcome to NanoBOT</h2>
+              <h2 className="text-xl font-bold text-text-primary mb-2">Welcome to BioDockify AI</h2>
               <p className="text-text-secondary mb-6 max-w-md mx-auto">
                 Your AI-powered drug discovery assistant. I can help with molecular docking, 
                 property prediction, lead optimization, and more!
@@ -292,7 +292,7 @@ export function AIAssistant() {
                     <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                   </div>
                 </div>
-                <p className="text-xs text-text-tertiary mt-1">NanoBOT is thinking...</p>
+                <p className="text-xs text-text-tertiary mt-1">BioDockify AI is thinking...</p>
               </div>
             </div>
           )}
@@ -329,7 +329,7 @@ export function AIAssistant() {
             </Button>
           </div>
           <p className="text-xs text-text-tertiary mt-2 text-center">
-            Press Enter to send, Shift+Enter for new line • NanoBOT uses chain-of-thought reasoning
+            Press Enter to send, Shift+Enter for new line • BioDockify AI uses chain-of-thought reasoning
           </p>
         </div>
       </Card>
