@@ -4,7 +4,7 @@ import { Card, Button, Input, ProgressBar, Badge, Tabs, TabPanel } from '@/compo
 import { useDockingStream } from '@/hooks'
 import { startDocking, cancelDocking } from '@/api/docking'
 import { uploadFile, downloadFile } from '@/api/upload'
-import { prepareProtein, prepareReceptorPDBQT } from '@/api/rdkit'
+import { prepareProtein, prepareReceptorPDBQT, prepareLigand } from '@/api/rdkit'
 import type { DockingConfig } from '@/lib/types'
 
 const SAMPLE_RECEPTOR_PDB = `HEADER    IMMUNE SYSTEM                           15-APR-98   1HIA
@@ -77,6 +77,8 @@ export function Docking() {
   const [receptorPrepInfo, setReceptorPrepInfo] = useState<{watersRemoved: number; hydrogensAdded: number} | null>(null)
   const [preparingReceptorPDBQT, setPreparingReceptorPDBQT] = useState(false)
   const [preparedReceptorPDBQTPath, setPreparedReceptorPDBQTPath] = useState<string | null>(null)
+  const [preparedLigandPath, setPreparedLigandPath] = useState<string | null>(null)
+  const [preparingLigand, setPreparingLigand] = useState(false)
   const [showSampleDataHint, setShowSampleDataHint] = useState(true)
   const [config, setConfig] = useState<DockingConfig>({
     center_x: 0,
@@ -124,6 +126,7 @@ export function Docking() {
     if (!files.length) return
     setLigandFiles(files)
     setLigandName(`${files.length} files selected`)
+    setPreparedLigandPath(null)
     setUploadError(null)
     setShowSampleDataHint(false)
   }, [])
@@ -185,8 +188,43 @@ export function Docking() {
     }
   }
 
+  const handlePrepareLigand = async () => {
+    if (ligandFiles.length === 0) return
+    setPreparingLigand(true)
+    setUploadError(null)
+    try {
+      const content = await downloadFile(ligandFiles[0])
+      const pdbContent = typeof content === 'string' ? content : content.content || content
+      const prepResult = await prepareLigand(pdbContent as string, ligandFiles[0].name)
+      if (prepResult.success && prepResult.pdbqt_path) {
+        setPreparedLigandPath(prepResult.pdbqt_path)
+      } else {
+        throw new Error(prepResult.message || 'Ligand preparation failed')
+      }
+    } catch (err) {
+      console.error('Failed to prepare ligand:', err)
+      setUploadError(err instanceof Error ? err.message : 'Failed to prepare ligand')
+    } finally {
+      setPreparingLigand(false)
+    }
+  }
+
   const handleStartDocking = async () => {
-    if (!receptorFile || ligandFiles.length === 0) return
+    if (!receptorFile) {
+      setUploadError('Please upload a receptor file first')
+      return
+    }
+
+    const ligandToUse = preparedLigandPath || (ligandFiles.length > 0 ? ligandFiles[0] : null)
+    if (!ligandToUse) {
+      setUploadError('Please upload a ligand file')
+      return
+    }
+
+    if (!preparedReceptorPDBQTPath && !preparedReceptorPath) {
+      setUploadError('Please prepare the receptor first')
+      return
+    }
 
     setUploadError(null)
     try {
@@ -200,7 +238,7 @@ export function Docking() {
         receptorPath = uploadResult.path
       }
       
-      const ligandUploadResult = await uploadFile(ligandFiles[0])
+      const ligandUploadResult = await uploadFile(ligandToUse)
       const ligandPath = ligandUploadResult.path
 
       const result = await startDocking(receptorPath, ligandPath, {
@@ -402,6 +440,26 @@ export function Docking() {
                   <span>📄</span>
                   <span className="text-sm font-medium text-text-primary flex-1 truncate">{ligandName}</span>
                   <Badge variant="success">Ready</Badge>
+                </div>
+              )}
+
+              {ligandName && !preparedLigandPath && (
+                <Button
+                  variant="primary"
+                  className="w-full mt-4"
+                  onClick={handlePrepareLigand}
+                  disabled={preparingLigand}
+                >
+                  {preparingLigand ? '⏳ Preparing Ligand...' : '⚡ Prepare Ligand (PDBQT)'}
+                </Button>
+              )}
+
+              {preparedLigandPath && (
+                <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="success">✓ Prepared</Badge>
+                  </div>
+                  <p className="text-xs text-green-700">Ligand ready for docking</p>
                 </div>
               )}
 
