@@ -2,7 +2,20 @@ import { useState, useEffect } from 'react'
 import { Card, Button, Input, Select, Tabs, TabPanel } from '@/components/ui'
 import { getLLMSettings, updateLLMSettings, testLLMConnection } from '@/api/settings'
 
+const AI_PROVIDERS = [
+  { value: 'openai', label: 'OpenAI', icon: '🤖', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] },
+  { value: 'anthropic', label: 'Anthropic Claude', icon: '🧠', models: ['claude-3-5-sonnet', 'claude-3-opus', 'claude-3-haiku'] },
+  { value: 'gemini', label: 'Google Gemini', icon: '✨', models: ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-pro'] },
+  { value: 'openrouter', label: 'OpenRouter', icon: '🔀', models: ['anthropic/claude-3.5-sonnet', 'google/gemini-pro'] },
+  { value: 'mistral', label: 'Mistral AI', icon: '🌊', models: ['mistral-large', 'mistral-7b-instruct'] },
+  { value: 'siliconflow', label: 'SiliconFlow', icon: '🌐', models: ['Qwen/Qwen2-72B', 'DeepSeek-V2.5'] },
+  { value: 'deepseek', label: 'DeepSeek', icon: '🐉', models: ['deepseek-chat', 'deepseek-coder'] },
+  { value: 'qwen', label: 'Qwen (Alibaba)', icon: '🏯', models: ['qwen-turbo', 'qwen-plus', 'qwen-max'] },
+  { value: 'ollama', label: 'Ollama (Local)', icon: '💻', models: ['llama3', 'mistral', 'codellama'] },
+];
+
 export function Settings() {
+  const [showApiKey, setShowApiKey] = useState(false)
   const [activeTab, setActiveTab] = useState('llm')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -46,51 +59,45 @@ export function Settings() {
         { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
         { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
       ],
+      anthropic: [
+        { value: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet (Recommended)' },
+        { value: 'claude-3-opus', label: 'Claude 3 Opus (Most capable)' },
+        { value: 'claude-3-haiku', label: 'Claude 3 Haiku (Fast)' },
+      ],
+      gemini: [
+        { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (Best)' },
+        { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (Fast)' },
+        { value: 'gemini-pro', label: 'Gemini Pro' },
+      ],
+      openrouter: [
+        { value: 'anthropic/claude-3.5-sonnet', label: 'Claude 3.5 Sonnet (via OpenRouter)' },
+        { value: 'google/gemini-pro', label: 'Gemini Pro (via OpenRouter)' },
+        { value: 'openai/gpt-4o', label: 'GPT-4o (via OpenRouter)' },
+      ],
+      mistral: [
+        { value: 'mistral-large', label: 'Mistral Large (Best)' },
+        { value: 'mistral-7b-instruct', label: 'Mistral 7B Instruct' },
+      ],
       deepseek: [
         { value: 'deepseek-chat', label: 'DeepSeek Chat (Recommended)' },
         { value: 'deepseek-coder', label: 'DeepSeek Coder' },
         { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner' },
       ],
-      zhipu: [
-        { value: 'glm-4', label: 'GLM-4 (Best)' },
-        { value: 'glm-4-flash', label: 'GLM-4 Flash (Fast)' },
-        { value: 'glm-3-turbo', label: 'GLM-3 Turbo' },
+      siliconflow: [
+        { value: 'Qwen/Qwen2-72B', label: 'Qwen2-72B (via SiliconFlow)' },
+        { value: 'deepseek-ai/DeepSeek-V2.5', label: 'DeepSeek V2.5 (via SiliconFlow)' },
+        { value: '01-ai/Yi-Large', label: 'Yi Large (via SiliconFlow)' },
       ],
       qwen: [
-        { value: 'qwen-plus', label: 'Qwen Plus (Recommended)' },
         { value: 'qwen-turbo', label: 'Qwen Turbo (Fast)' },
-        { value: 'qwen-max', label: 'Qwen Max' },
-        { value: 'qwen2-72b', label: 'Qwen2-72B' },
-      ],
-      moonshot: [
-        { value: 'moonshot-v1-8k', label: 'Moonshot V1 8K' },
-        { value: 'moonshot-v1-32k', label: 'Moonshot V1 32K' },
-        { value: 'moonshot-v1-128k', label: 'Moonshot V1 128K' },
-      ],
-      siliconflow: [
-        { value: 'deepseek-chat', label: 'DeepSeek Chat (via SiliconFlow)' },
-        { value: 'qwen-plus', label: 'Qwen Plus (via SiliconFlow)' },
-        { value: 'yi-large', label: 'Yi Large (via SiliconFlow)' },
-        { value: 'internlm2-large', label: 'InternLM2 Large (via SiliconFlow)' },
-        { value: 'qwen2-72b-instruct', label: 'Qwen2-72B (via SiliconFlow)' },
-      ],
-      groq: [
-        { value: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B Versatile' },
-        { value: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant' },
-        { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
+        { value: 'qwen-plus', label: 'Qwen Plus (Recommended)' },
+        { value: 'qwen-max', label: 'Qwen Max (Best)' },
       ],
       ollama: [
         { value: 'llama3', label: 'Llama 3' },
-        { value: 'llama3.1', label: 'Llama 3.1' },
-        { value: 'llama3.2', label: 'Llama 3.2' },
-        { value: 'mixtral', label: 'Mixtral' },
         { value: 'mistral', label: 'Mistral' },
-        { value: 'qwen2.5', label: 'Qwen 2.5' },
         { value: 'codellama', label: 'Code Llama' },
-        { value: 'nomic-embed-text', label: 'Nomic Embed Text' },
-      ],
-      lmstudio: [
-        { value: 'local-model', label: 'Local Model (any loaded)' },
+        { value: 'qwen2.5', label: 'Qwen 2.5' },
       ],
     }
     return models[provider] || models.openai
@@ -99,14 +106,14 @@ export function Settings() {
   const getBaseUrlForProvider = (provider: string) => {
     const baseUrls: Record<string, string> = {
       openai: 'https://api.openai.com/v1',
-      deepseek: 'https://api.deepseek.com/v1',
-      zhipu: 'https://open.bigmodel.cn/api/paas/v4',
-      qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      moonshot: 'https://api.moonshot.cn/v1',
+      anthropic: 'https://api.anthropic.com/v1',
+      gemini: 'https://generativelanguage.googleapis.com/v1beta',
+      openrouter: 'https://openrouter.ai/api/v1',
+      mistral: 'https://api.mistral.ai/v1',
       siliconflow: 'https://api.siliconflow.cn/v1',
-      groq: 'https://api.groq.com/openai/v1',
+      deepseek: 'https://api.deepseek.com/v1',
+      qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       ollama: 'http://localhost:11434/v1',
-      lmstudio: 'http://localhost:1234/v1',
     }
     return baseUrls[provider] || ''
   }
@@ -191,15 +198,15 @@ export function Settings() {
                   value={llmConfig.provider}
                   onChange={(e) => handleProviderChange(e.target.value)}
                   options={[
-                    { value: 'openai', label: '🌐 OpenAI (GPT-4, GPT-4o)' },
-                    { value: 'deepseek', label: '🇨🇳 DeepSeek (DeepSeek Chat, Coder)' },
-                    { value: 'zhipu', label: '🇨🇳 Zhipu AI (GLM-4)' },
-                    { value: 'qwen', label: '🇨🇳 Qwen (Alibaba, 通义千问)' },
-                    { value: 'moonshot', label: '🇨🇳 Moonshot (月之暗面, Kimi)' },
-                    { value: 'siliconflow', label: '🇨🇳 SiliconFlow (聚合: DeepSeek, Qwen, Yi)' },
-                    { value: 'groq', label: '⚡ Groq (Fast inference, Llama)' },
-                    { value: 'ollama', label: '💻 Ollama (Local models)' },
-                    { value: 'lmstudio', label: '💻 LM Studio (Local models)' },
+                    { value: 'openai', label: '🤖 OpenAI (GPT-4, GPT-4o)' },
+                    { value: 'anthropic', label: '🧠 Anthropic Claude' },
+                    { value: 'gemini', label: '✨ Google Gemini' },
+                    { value: 'openrouter', label: '🔀 OpenRouter' },
+                    { value: 'mistral', label: '🌊 Mistral AI' },
+                    { value: 'siliconflow', label: '🌐 SiliconFlow' },
+                    { value: 'deepseek', label: '🐉 DeepSeek' },
+                    { value: 'qwen', label: '🏯 Qwen (Alibaba)' },
+                    { value: 'ollama', label: '💻 Ollama (Local)' },
                   ]}
                 />
 
@@ -218,22 +225,31 @@ export function Settings() {
                   hint="OpenAI-compatible endpoint base URL"
                 />
 
-                <Input
-                  label="API Key"
-                  type="password"
-                  value={llmConfig.apiKey}
-                  onChange={(e) => setLlmConfig({ ...llmConfig, apiKey: e.target.value })}
-                  placeholder={
-                    llmConfig.provider === 'ollama' || llmConfig.provider === 'lmstudio'
-                      ? 'Leave empty for local models'
-                      : 'sk-...'
-                  }
-                  hint={
-                    llmConfig.provider === 'ollama' || llmConfig.provider === 'lmstudio'
-                      ? 'No API key needed for local models'
-                      : 'Your API key is stored only in memory and not persisted'
-                  }
-                />
+                <div className="relative">
+                  <Input
+                    label="API Key"
+                    type={showApiKey ? 'text' : 'password'}
+                    value={llmConfig.apiKey}
+                    onChange={(e) => setLlmConfig({ ...llmConfig, apiKey: e.target.value })}
+                    placeholder={
+                      llmConfig.provider === 'ollama'
+                        ? 'Leave empty for local models'
+                        : 'sk-...'
+                    }
+                    hint={
+                      llmConfig.provider === 'ollama'
+                        ? 'No API key needed for local models'
+                        : 'Your API key is stored only in memory and not persisted'
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-8 text-text-tertiary hover:text-text-primary text-xs"
+                  >
+                    {showApiKey ? 'Hide' : 'Show'}
+                  </button>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <Input
@@ -287,10 +303,54 @@ export function Settings() {
 
             {/* Provider Info Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {llmConfig.provider === 'deepseek' && (
+              {llmConfig.provider === 'anthropic' && (
+                <Card className="border-orange-200 bg-orange-50/50">
+                  <h4 className="font-bold text-orange-800 mb-2">🧠 Anthropic Claude Setup</h4>
+                  <ol className="text-xs text-orange-700 space-y-1 list-decimal list-inside">
+                    <li>Visit <a href="https://console.anthropic.com" className="underline" target="_blank" rel="noopener">console.anthropic.com</a></li>
+                    <li>Create account and get API key</li>
+                    <li>Base URL is already configured</li>
+                    <li>Claude 3.5 Sonnet is recommended for best balance</li>
+                  </ol>
+                </Card>
+              )}
+              {llmConfig.provider === 'gemini' && (
                 <Card className="border-blue-200 bg-blue-50/50">
-                  <h4 className="font-bold text-blue-800 mb-2">🇨🇳 DeepSeek Setup</h4>
+                  <h4 className="font-bold text-blue-800 mb-2">✨ Google Gemini Setup</h4>
                   <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                    <li>Visit <a href="https://aistudio.google.com" className="underline" target="_blank" rel="noopener">aistudio.google.com</a></li>
+                    <li>Get API key from Google AI Studio</li>
+                    <li>Base URL is already configured</li>
+                    <li>Gemini 1.5 Pro offers large context windows</li>
+                  </ol>
+                </Card>
+              )}
+              {llmConfig.provider === 'openrouter' && (
+                <Card className="border-purple-200 bg-purple-50/50">
+                  <h4 className="font-bold text-purple-800 mb-2">🔀 OpenRouter Setup</h4>
+                  <ol className="text-xs text-purple-700 space-y-1 list-decimal list-inside">
+                    <li>Visit <a href="https://openrouter.ai" className="underline" target="_blank" rel="noopener">openrouter.ai</a></li>
+                    <li>Sign up and add credits</li>
+                    <li>Access many models through unified API</li>
+                    <li>Base URL is already configured</li>
+                  </ol>
+                </Card>
+              )}
+              {llmConfig.provider === 'mistral' && (
+                <Card className="border-cyan-200 bg-cyan-50/50">
+                  <h4 className="font-bold text-cyan-800 mb-2">🌊 Mistral AI Setup</h4>
+                  <ol className="text-xs text-cyan-700 space-y-1 list-decimal list-inside">
+                    <li>Visit <a href="https://console.mistral.ai" className="underline" target="_blank" rel="noopener">console.mistral.ai</a></li>
+                    <li>Create account and get API key</li>
+                    <li>Base URL is already configured</li>
+                    <li>Mistral Large is their most capable model</li>
+                  </ol>
+                </Card>
+              )}
+              {llmConfig.provider === 'deepseek' && (
+                <Card className="border-green-200 bg-green-50/50">
+                  <h4 className="font-bold text-green-800 mb-2">🐉 DeepSeek Setup</h4>
+                  <ol className="text-xs text-green-700 space-y-1 list-decimal list-inside">
                     <li>Visit <a href="https://platform.deepseek.com" className="underline" target="_blank" rel="noopener">platform.deepseek.com</a></li>
                     <li>Create account and get API key</li>
                     <li>Base URL is already configured</li>
@@ -298,21 +358,10 @@ export function Settings() {
                   </ol>
                 </Card>
               )}
-              {llmConfig.provider === 'zhipu' && (
-                <Card className="border-purple-200 bg-purple-50/50">
-                  <h4 className="font-bold text-purple-800 mb-2">🇨🇳 Zhipu AI (智谱) Setup</h4>
-                  <ol className="text-xs text-purple-700 space-y-1 list-decimal list-inside">
-                    <li>Visit <a href="https://open.bigmodel.cn" className="underline" target="_blank" rel="noopener">open.bigmodel.cn</a></li>
-                    <li>Sign up and get API key</li>
-                    <li>Base URL is already configured</li>
-                    <li>GLM-4 is their best model</li>
-                  </ol>
-                </Card>
-              )}
               {llmConfig.provider === 'qwen' && (
-                <Card className="border-orange-200 bg-orange-50/50">
-                  <h4 className="font-bold text-orange-800 mb-2">🇨🇳 Qwen (通义千问) Setup</h4>
-                  <ol className="text-xs text-orange-700 space-y-1 list-decimal list-inside">
+                <Card className="border-red-200 bg-red-50/50">
+                  <h4 className="font-bold text-red-800 mb-2">🏯 Qwen (Alibaba) Setup</h4>
+                  <ol className="text-xs text-red-700 space-y-1 list-decimal list-inside">
                     <li>Visit <a href="https://dashscope.console.aliyun.com" className="underline" target="_blank" rel="noopener">dashscope.console.aliyun.com</a></li>
                     <li>Enable the model in your dashboard</li>
                     <li>Get API key from your account</li>
@@ -320,20 +369,9 @@ export function Settings() {
                   </ol>
                 </Card>
               )}
-              {llmConfig.provider === 'moonshot' && (
-                <Card className="border-indigo-200 bg-indigo-50/50">
-                  <h4 className="font-bold text-indigo-800 mb-2">🇨🇳 Moonshot (月之暗面, Kimi) Setup</h4>
-                  <ol className="text-xs text-indigo-700 space-y-1 list-decimal list-inside">
-                    <li>Visit <a href="https://platform.moonshot.cn" className="underline" target="_blank" rel="noopener">platform.moonshot.cn</a></li>
-                    <li>Create account and get API key</li>
-                    <li>Kimi has very long context (128K)</li>
-                    <li>Great for analyzing large molecules</li>
-                  </ol>
-                </Card>
-              )}
               {llmConfig.provider === 'siliconflow' && (
                 <Card className="border-pink-200 bg-pink-50/50">
-                  <h4 className="font-bold text-pink-800 mb-2">🇨🇳 SiliconFlow Setup</h4>
+                  <h4 className="font-bold text-pink-800 mb-2">🌐 SiliconFlow Setup</h4>
                   <ol className="text-xs text-pink-700 space-y-1 list-decimal list-inside">
                     <li>Visit <a href="https://siliconflow.cn" className="underline" target="_blank" rel="noopener">siliconflow.cn</a></li>
                     <li>Aggregates many Chinese models in one place</li>
@@ -343,24 +381,13 @@ export function Settings() {
                 </Card>
               )}
               {llmConfig.provider === 'ollama' && (
-                <Card className="border-green-200 bg-green-50/50">
-                  <h4 className="font-bold text-green-800 mb-2">💻 Ollama (Local) Setup</h4>
-                  <ol className="text-xs text-green-700 space-y-1 list-decimal list-inside">
+                <Card className="border-teal-200 bg-teal-50/50">
+                  <h4 className="font-bold text-teal-800 mb-2">💻 Ollama (Local) Setup</h4>
+                  <ol className="text-xs text-teal-700 space-y-1 list-decimal list-inside">
                     <li>Install <a href="https://ollama.com" className="underline" target="_blank" rel="noopener">ollama.com</a></li>
-                    <li>Run: <code className="bg-green-100 px-1 rounded">ollama pull llama3</code></li>
+                    <li>Run: <code className="bg-teal-100 px-1 rounded">ollama pull llama3</code></li>
                     <li>API key not needed (runs locally)</li>
                     <li>Base URL is already configured</li>
-                  </ol>
-                </Card>
-              )}
-              {llmConfig.provider === 'lmstudio' && (
-                <Card className="border-teal-200 bg-teal-50/50">
-                  <h4 className="font-bold text-teal-800 mb-2">💻 LM Studio (Local) Setup</h4>
-                  <ol className="text-xs text-teal-700 space-y-1 list-decimal list-inside">
-                    <li>Download <a href="https://lmstudio.ai" className="underline" target="_blank" rel="noopener">lmstudio.ai</a></li>
-                    <li>Download a model (e.g., Llama 3)</li>
-                    <li>Click "Start Server" in LM Studio</li>
-                    <li>API key not needed (runs locally)</li>
                   </ol>
                 </Card>
               )}
