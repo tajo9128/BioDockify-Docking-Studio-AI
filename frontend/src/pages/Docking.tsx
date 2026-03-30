@@ -1,10 +1,21 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { Viewer } from '@/components/Viewer'
+
+interface Config {
+  center_x: number
+  center_y: number
+  center_z: number
+  size_x: number
+  size_y: number
+  size_z: number
+  exhaustiveness: number
+  num_modes: number
+}
 
 export function Docking() {
   const [receptor, setReceptor] = useState<File | null>(null)
   const [ligand, setLigand] = useState<File | null>(null)
-  const [config, setConfig] = useState({
+  const [config, setConfig] = useState<Config>({
     center_x: 0, center_y: 0, center_z: 0,
     size_x: 20, size_y: 20, size_z: 20,
     exhaustiveness: 8,
@@ -12,7 +23,11 @@ export function Docking() {
   })
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
-  const [results, setResults] = useState<any[]>([])
+  const [results] = useState<any[]>([])
+
+  const handleConfigChange = (key: keyof Config, value: number) => {
+    setConfig(prev => ({ ...prev, [key]: value }))
+  }
 
   const handleDocking = async () => {
     if (!receptor || !ligand) {
@@ -56,13 +71,13 @@ export function Docking() {
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-3">Grid Box Center</h3>
             <div className="grid grid-cols-3 gap-2">
-              {['x', 'y', 'z'].map(axis => (
+              {(['x', 'y', 'z'] as const).map(axis => (
                 <div key={axis}>
                   <label className="text-xs text-gray-500 uppercase">{axis}</label>
                   <input
                     type="number"
                     value={config[`center_${axis}`]}
-                    onChange={e => setConfig({...config, [`center_${axis}`]: parseFloat(e.target.value)})}
+                    onChange={e => handleConfigChange(`center_${axis}`, parseFloat(e.target.value))}
                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                   />
                 </div>
@@ -73,13 +88,13 @@ export function Docking() {
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-3">Grid Box Size</h3>
             <div className="grid grid-cols-3 gap-2">
-              {['x', 'y', 'z'].map(axis => (
+              {(['x', 'y', 'z'] as const).map(axis => (
                 <div key={axis}>
                   <label className="text-xs text-gray-500 uppercase">{axis}</label>
                   <input
                     type="number"
                     value={config[`size_${axis}`]}
-                    onChange={e => setConfig({...config, [`size_${axis}`]: parseFloat(e.target.value)})}
+                    onChange={e => handleConfigChange(`size_${axis}`, parseFloat(e.target.value))}
                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
                   />
                 </div>
@@ -91,7 +106,7 @@ export function Docking() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Exhaustiveness: {config.exhaustiveness}</label>
             <input
               type="range" min="1" max="64" value={config.exhaustiveness}
-              onChange={e => setConfig({...config, exhaustiveness: parseInt(e.target.value)})}
+              onChange={e => handleConfigChange('exhaustiveness', parseInt(e.target.value))}
               className="w-full"
             />
           </div>
@@ -100,7 +115,7 @@ export function Docking() {
             <label className="block text-sm font-medium text-gray-700 mb-2">Number of Modes: {config.num_modes}</label>
             <input
               type="range" min="1" max="50" value={config.num_modes}
-              onChange={e => setConfig({...config, num_modes: parseInt(e.target.value)})}
+              onChange={e => handleConfigChange('num_modes', parseInt(e.target.value))}
               className="w-full"
             />
           </div>

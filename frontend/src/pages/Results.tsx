@@ -24,7 +24,6 @@ interface Job {
 export function Results() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-  const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'docking' | 'md' | 'qsar'>('all')
 
   useEffect(() => {
@@ -37,7 +36,6 @@ export function Results() {
         }
       })
       .catch(console.error)
-      .finally(() => setLoading(false))
   }, [])
 
   const filteredJobs = jobs.filter(job => {
@@ -50,7 +48,6 @@ export function Results() {
 
   return (
     <div className="h-full flex">
-      {/* Left Panel - Job List */}
       <div className="w-72 bg-gray-50 border-r border-gray-200 overflow-y-auto">
         <div className="p-4 border-b border-gray-200">
           <h2 className="font-semibold text-gray-900">Results</h2>
@@ -95,7 +92,6 @@ export function Results() {
         </div>
       </div>
 
-      {/* Main Content - Results Detail */}
       <div className="flex-1 overflow-y-auto">
         {selectedJob ? (
           <div className="p-6">

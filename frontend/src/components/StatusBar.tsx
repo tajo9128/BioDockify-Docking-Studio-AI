@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 
 export function StatusBar() {
   const [gpuStatus, setGpuStatus] = useState<string>('Checking...')
-  const [jobs, setJobs] = useState(0)
+  const [jobs] = useState(0)
   
   useEffect(() => {
     fetch('/api/gpu/status')
@@ -22,7 +22,7 @@ export function StatusBar() {
       </div>
       <div className="flex items-center gap-4">
         <span>Jobs: {jobs}</span>
-        <span>v2.2.2</span>
+        <span>v2.3.0</span>
       </div>
     </footer>
   )
