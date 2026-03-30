@@ -24,7 +24,7 @@ export interface Job {
   job_name: string
   receptor_file: string
   ligand_file: string
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   created_at: string
   completed_at?: string
   binding_energy?: number

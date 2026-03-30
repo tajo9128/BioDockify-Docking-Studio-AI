@@ -358,6 +358,10 @@ export function Viewer() {
   const [_activePanel, _setActivePanel] = useState<'style' | 'trajectory' | 'analysis'>('style')
   const animationRef = useRef<number | null>(null)
   const lastFrameRef = useRef<number>(0)
+  const currentFrameRef = useRef(0)
+  const lastAnimTimeRef = useRef<number>(0)
+
+  useEffect(() => { currentFrameRef.current = trajState.currentFrame }, [trajState.currentFrame])
 
   // Apply style and color to viewer
   const applyStyle = (newStyle: string, newColor: string) => {
@@ -535,12 +539,22 @@ export function Viewer() {
       }
       setTrajState((prev) => ({ ...prev, isPlaying: false }))
     } else {
-      const animate = () => {
+      lastAnimTimeRef.current = 0
+      const animate = (timestamp: number) => {
         if (!viewerRef.current) return
-        const nextFrame = (trajState.currentFrame + 1) % trajState.totalFrames
-        viewerRef.current.setFrame(nextFrame)
-        viewerRef.current.render()
-        setTrajState((prev) => ({ ...prev, currentFrame: nextFrame }))
+        if (lastAnimTimeRef.current === 0) {
+          lastAnimTimeRef.current = timestamp
+        }
+        const elapsed = timestamp - lastAnimTimeRef.current
+        const frameInterval = 1000 / trajState.playbackSpeed
+        if (elapsed >= frameInterval) {
+          lastAnimTimeRef.current = timestamp - (elapsed % frameInterval)
+          const nextFrame = (currentFrameRef.current + 1) % trajState.totalFrames
+          viewerRef.current.setFrame(nextFrame)
+          viewerRef.current.render()
+          currentFrameRef.current = nextFrame
+          setTrajState((prev) => ({ ...prev, currentFrame: nextFrame }))
+        }
         animationRef.current = requestAnimationFrame(animate)
       }
       animationRef.current = requestAnimationFrame(animate)
@@ -785,7 +799,11 @@ export function Viewer() {
                       stroke="#4ade80"
                       strokeWidth="1"
                       points={trajState.rmsdHistory
-                        .map((v, i) => `${(i / (trajState.rmsdHistory.length - 1)) * 100},${30 - (v / Math.max(...trajState.rmsdHistory)) * 25}`)
+                        .map((v, i) => {
+                          const maxRmsd = Math.max(...trajState.rmsdHistory, 0.001)
+                          const x = (trajState.rmsdHistory.length > 1 ? i / (trajState.rmsdHistory.length - 1) : 0.5) * 100
+                          return `${x},${30 - (v / maxRmsd) * 25}`
+                        })
                         .join(' ')}
                     />
                     <line x1="0" y1="30" x2="100" y2="30" stroke="#374151" strokeWidth="0.5" />

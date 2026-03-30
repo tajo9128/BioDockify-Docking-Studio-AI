@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { apiClient } from '@/lib/apiClient'
 
 interface Stats {
   totalJobs: number
@@ -27,18 +28,16 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/jobs')
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setRecentJobs(data.slice(0, 5))
-          setStats({
-            totalJobs: data.length,
-            completedJobs: data.filter((j: any) => j.status === 'completed').length,
-            runningJobs: data.filter((j: any) => j.status === 'running').length,
-            failedJobs: data.filter((j: any) => j.status === 'failed').length
-          })
-        }
+    apiClient.get('/jobs')
+      .then(({ data }) => {
+        const jobs = Array.isArray(data) ? data : (data.jobs ?? [])
+        setRecentJobs(jobs.slice(0, 5))
+        setStats({
+          totalJobs: jobs.length,
+          completedJobs: jobs.filter((j: any) => j.status?.toLowerCase() === 'completed').length,
+          runningJobs: jobs.filter((j: any) => j.status?.toLowerCase() === 'running').length,
+          failedJobs: jobs.filter((j: any) => j.status?.toLowerCase() === 'failed').length
+        })
       })
       .catch(() => {})
       .finally(() => setLoading(false))

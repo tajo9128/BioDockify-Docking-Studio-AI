@@ -60,10 +60,10 @@ notifications = NotificationManager()
 def _get_best_platform():
     """Get the best available OpenMM platform (GPU if available, else CPU)"""
     import openmm as mm
-    
+
     # Check for GPU platforms in order of preference
     gpu_platforms = ["CUDA", "OpenCL", "HIP"]
-    
+
     for platform_name in gpu_platforms:
         try:
             platform = mm.Platform.getPlatformByName(platform_name)
@@ -83,9 +83,9 @@ def _get_best_platform():
                     return platform
         except Exception:
             pass
-    
+
     logger.info("GPU not available, using CPU platform")
-    return _get_best_platform()
+    return mm.Platform.getPlatformByName("CPU")
 
 
 def _set_job_status(
@@ -209,39 +209,37 @@ def gpu_status():
     """Check GPU availability for MD simulations"""
     try:
         import openmm as mm
-        
+
         available_platforms = []
         gpu_platforms = []
-        
+
         for platform in mm.Platform.getPlatforms():
             name = platform.getName()
             available_platforms.append(name)
-            
+
             if name in ["CUDA", "OpenCL", "HIP"]:
                 props = platform.getProperties()
                 gpu_info = {"name": name, "properties": props}
-                
+
                 # Try to get device info
                 if name == "CUDA":
                     gpu_info["device_count"] = props.get("CudaDeviceIndex", "Unknown")
                 elif name == "OpenCL":
                     gpu_info["device_count"] = props.get("OpenCLDeviceIndex", "Unknown")
-                    
+
                 gpu_platforms.append(gpu_info)
-        
+
         return {
             "gpu_available": len(gpu_platforms) > 0,
             "gpu_platforms": gpu_platforms,
             "all_platforms": available_platforms,
-            "recommended_platform": gpu_platforms[0]["name"] if gpu_platforms else "CPU",
-            "message": "GPU detected!" if gpu_platforms else "No GPU found, using CPU"
+            "recommended_platform": gpu_platforms[0]["name"]
+            if gpu_platforms
+            else "CPU",
+            "message": "GPU detected!" if gpu_platforms else "No GPU found, using CPU",
         }
     except Exception as e:
-        return {
-            "gpu_available": False,
-            "error": str(e),
-            "recommended_platform": "CPU"
-        }
+        return {"gpu_available": False, "error": str(e), "recommended_platform": "CPU"}
 
 
 @app.get("/")
@@ -315,8 +313,10 @@ def _run_dynamics(job_id: str, request: DynamicsRequest):
 
         if request.ionic_strength > 0:
             _update_progress(job_id, 35, f"Adding ions ({request.ionic_strength}M)...")
-            modeller.addNeutralBuffer(
-                forcefield, request.ionic_strength * unit.molar, "Na+", "Cl-"
+            modeller.addSolvent(
+                forcefield,
+                model=request.solvent_model,
+                ionicStrength=request.ionic_strength * unit.molar,
             )
 
         _update_progress(job_id, 45, "Creating OpenMM system...")

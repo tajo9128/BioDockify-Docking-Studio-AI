@@ -180,7 +180,9 @@ def start_async_docking(request: DockingJobRequest, background_tasks: Background
             "receptor_path": request.receptor_path,
             "ligand_path": request.ligand_path,
             "engine": request.engine,
-            "center": json.dumps([request.center_x, request.center_y, request.center_z]),
+            "center": json.dumps(
+                [request.center_x, request.center_y, request.center_z]
+            ),
             "size": json.dumps([request.size_x, request.size_y, request.size_z]),
             "exhaustiveness": str(request.exhaustiveness),
             "num_modes": str(request.num_modes),
@@ -216,18 +218,39 @@ def process_docking_job(job_id: str, job_data: dict):
 
         from docking_engine import run_docking as _run_docking
 
+        center = (
+            json.loads(job_data["center"])
+            if isinstance(job_data["center"], str)
+            else job_data["center"]
+        )
+        size = (
+            json.loads(job_data["size"])
+            if isinstance(job_data["size"], str)
+            else job_data["size"]
+        )
+        exhaustiveness = (
+            int(job_data["exhaustiveness"])
+            if isinstance(job_data["exhaustiveness"], str)
+            else job_data["exhaustiveness"]
+        )
+        num_modes = (
+            int(job_data["num_modes"])
+            if isinstance(job_data["num_modes"], str)
+            else job_data["num_modes"]
+        )
+
         result = _run_docking(
             receptor_path=job_data["receptor_path"],
             ligand_path=job_data["ligand_path"],
             engine=job_data["engine"],
-            center_x=job_data["center"][0],
-            center_y=job_data["center"][1],
-            center_z=job_data["center"][2],
-            size_x=job_data["size"][0],
-            size_y=job_data["size"][1],
-            size_z=job_data["size"][2],
-            exhaustiveness=job_data["exhaustiveness"],
-            num_modes=job_data["num_modes"],
+            center_x=center[0],
+            center_y=center[1],
+            center_z=center[2],
+            size_x=size[0],
+            size_y=size[1],
+            size_z=size[2],
+            exhaustiveness=exhaustiveness,
+            num_modes=num_modes,
             output_dir=STORAGE_DIR,
         )
 
@@ -238,7 +261,11 @@ def process_docking_job(job_id: str, job_data: dict):
         if result.get("success"):
             r.hset(
                 f"docking_job:{job_id}",
-                mapping={**job_data, "status": "completed", "result": json.dumps(result)},
+                mapping={
+                    **job_data,
+                    "status": "completed",
+                    "result": json.dumps(result),
+                },
             )
         else:
             r.hset(

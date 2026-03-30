@@ -18,8 +18,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
-DOCKING_SERVICE_URL = os.getenv("DOCKING_SERVICE_URL", "http://docking-service:8000")
-RDKIT_SERVICE_URL = os.getenv("RDKIT_SERVICE_URL", "http://rdkit-service:8000")
+DOCKING_SERVICE_URL = os.getenv("DOCKING_SERVICE_URL", "http://docking-service:8002")
+RDKIT_SERVICE_URL = os.getenv("RDKIT_SERVICE_URL", "http://rdkit-service:8003")
 PHARMACOPHORE_SERVICE_URL = os.getenv(
     "PHARMACOPHORE_SERVICE_URL", "http://pharmacophore-service:8000"
 )
@@ -205,8 +205,8 @@ def run_consensus_docking(self, job_id: str, parameters: dict):
         gnina_response.raise_for_status()
         gnina_result = gnina_response.json()
 
-        vina_poses = vina_result.get("results", [])
-        gnina_poses = gnina_result.get("results", [])
+        vina_poses = vina_result.get("poses", [])
+        gnina_poses = gnina_result.get("poses", [])
 
         consensus_results = []
         for i, (vp, gp) in enumerate(zip(vina_poses, gnina_poses)):
@@ -372,7 +372,7 @@ def run_md_simulation(self, job_id: str, parameters: dict):
         )
 
         async_result = httpx.post(
-            f"{MD_SERVICE_URL}/simulate",
+            f"{MD_SERVICE_URL}/dynamics",
             json={"job_id": job_id, **parameters},
             timeout=7200.0,
         )

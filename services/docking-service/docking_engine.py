@@ -173,7 +173,7 @@ def run_vina_docking(
         output_file = os.path.join(output_dir, "vina_results.pdbqt")
         try:
             v.write_pose(output_file, overwrite=True)
-        except:
+        except Exception:
             pass
 
         return {
@@ -244,6 +244,7 @@ def run_gnina_docking(
         "--log",
         log_file,
         "--cpu",
+        str(os.cpu_count() or 1),
     ]
 
     logger.info(f"Running GNINA: {' '.join(cmd[:6])}...")
@@ -390,7 +391,7 @@ def run_docking(
         for i, (vp, gp) in enumerate(zip(vina_poses, gnina_poses)):
             vina_score = vp.get("vina_score", 0)
             gnina_score = gp.get("gnina_score", 0)
-            if gnina_score:
+            if gnina_score is not None:
                 consensus_score = (vina_score + gnina_score) / 2
             else:
                 consensus_score = vina_score
@@ -421,26 +422,50 @@ def run_docking(
 
 
 def run_consensus(receptor, ligand, center, size, exhaustiveness, num_modes):
-    vina_result = run_vina_docking(receptor, ligand, center[0], center[1], center[2],
-                                    size[0], size[1], size[2], exhaustiveness, num_modes)
+    vina_result = run_vina_docking(
+        receptor,
+        ligand,
+        center[0],
+        center[1],
+        center[2],
+        size[0],
+        size[1],
+        size[2],
+        exhaustiveness,
+        num_modes,
+    )
 
     if not check_gnina():
         logger.warning("GNINA not installed, running Vina-only consensus")
         for pose in vina_result.get("poses", []):
             pose["consensus_score"] = pose.get("vina_score")
         vina_result["gnina_available"] = False
-        vina_result["consensus_note"] = "GNINA not installed - consensus uses Vina scores only"
+        vina_result["consensus_note"] = (
+            "GNINA not installed - consensus uses Vina scores only"
+        )
         return vina_result
 
-    gnina_result = run_gnina_docking(receptor, ligand, center[0], center[1], center[2],
-                                     size[0], size[1], size[2], exhaustiveness, num_modes)
+    gnina_result = run_gnina_docking(
+        receptor,
+        ligand,
+        center[0],
+        center[1],
+        center[2],
+        size[0],
+        size[1],
+        size[2],
+        exhaustiveness,
+        num_modes,
+    )
 
     if not gnina_result.get("success"):
         logger.warning(f"GNINA failed: {gnina_result.get('error')}, using Vina only")
         for pose in vina_result.get("poses", []):
             pose["consensus_score"] = pose.get("vina_score")
         vina_result["gnina_available"] = False
-        vina_result["consensus_note"] = f"GNINA failed - {gnina_result.get('error', 'unknown error')}"
+        vina_result["consensus_note"] = (
+            f"GNINA failed - {gnina_result.get('error', 'unknown error')}"
+        )
         return vina_result
 
     consensus_poses = []
@@ -462,7 +487,7 @@ def run_consensus(receptor, ligand, center, size, exhaustiveness, num_modes):
         "success": True,
         "poses": consensus_poses,
         "gnina_available": True,
-        "consensus_note": "Scores averaged from Vina and GNINA"
+        "consensus_note": "Scores averaged from Vina and GNINA",
     }
 
 

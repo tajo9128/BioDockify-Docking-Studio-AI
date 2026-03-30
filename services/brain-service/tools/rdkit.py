@@ -166,21 +166,19 @@ class CalculatePropertiesTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"{RDKIT_SERVICE}/descriptors",
+                    f"{RDKIT_SERVICE}/properties",
                     json={"smiles": input_data.smiles},
                 )
                 response.raise_for_status()
                 result = response.json()
 
-                props = result.get("descriptors", {})
-
-                mw = props.get("MolWt", 0)
-                logp = props.get("MolLogP", 0)
-                tpsa = props.get("TPSA", 0)
-                hbd = props.get("NumHDonors", 0)
-                hba = props.get("NumHAcceptors", 0)
-                rotatable = props.get("NumRotatableBonds", 0)
-                charge = props.get("MolCharge", 0)
+                mw = result.get("mw", 0)
+                logp = result.get("logp", 0)
+                tpsa = result.get("tpsa", 0)
+                hbd = result.get("num_h_donors", 0)
+                hba = result.get("num_h_acceptors", 0)
+                rotatable = result.get("num_rotatable_bonds", 0)
+                charge = 0
 
                 drug_like = (
                     mw < 500 and logp < 5 and hbd <= 5 and hba <= 10 and rotatable <= 10
@@ -321,19 +319,18 @@ class PredictADMETTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"{RDKIT_SERVICE}/descriptors",
+                    f"{RDKIT_SERVICE}/properties",
                     json={"smiles": input_data.smiles},
                 )
                 response.raise_for_status()
                 result = response.json()
 
-                props = result.get("descriptors", {})
-                mw = props.get("MolWt", 0)
-                logp = props.get("MolLogP", 0)
-                tpsa = props.get("TPSA", 0)
-                hbd = props.get("NumHDonors", 0)
-                hba = props.get("NumHAcceptors", 0)
-                rotatable = props.get("NumRotatableBonds", 0)
+                mw = result.get("mw", 0)
+                logp = result.get("logp", 0)
+                tpsa = result.get("tpsa", 0)
+                hbd = result.get("num_h_donors", 0)
+                hba = result.get("num_h_acceptors", 0)
+                rotatable = result.get("num_rotatable_bonds", 0)
 
                 absorption = (
                     "High"
@@ -382,7 +379,7 @@ class PredictADMETTool(BaseTool):
                             if hbd > 3
                             else "Non-substrate",
                         },
-                        " Lipinski_score": "Pass"
+                        "lipinski_score": "Pass"
                         if mw < 500 and logp < 5 and hbd <= 5 and hba <= 10
                         else "Review",
                     },
@@ -419,19 +416,18 @@ class SuggestOptimizationTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"{RDKIT_SERVICE}/descriptors",
+                    f"{RDKIT_SERVICE}/properties",
                     json={"smiles": input_data.smiles},
                 )
                 response.raise_for_status()
                 result = response.json()
 
-                props = result.get("descriptors", {})
-                mw = props.get("MolWt", 0)
-                logp = props.get("MolLogP", 0)
-                tpsa = props.get("TPSA", 0)
-                hbd = props.get("NumHDonors", 0)
-                hba = props.get("NumHAcceptors", 0)
-                rotatable = props.get("NumRotatableBonds", 0)
+                mw = result.get("mw", 0)
+                logp = result.get("logp", 0)
+                tpsa = result.get("tpsa", 0)
+                hbd = result.get("num_h_donors", 0)
+                hba = result.get("num_h_acceptors", 0)
+                rotatable = result.get("num_rotatable_bonds", 0)
 
                 suggestions = []
 

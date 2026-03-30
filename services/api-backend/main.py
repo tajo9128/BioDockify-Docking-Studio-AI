@@ -41,9 +41,9 @@ PHARMACOPHORE_SERVICE_URL = os.getenv(
     "PHARMACOPHORE_SERVICE_URL", "http://pharmacophore-service:8004"
 )
 QSAR_SERVICE_URL = os.getenv("QSAR_SERVICE_URL", "http://qsar-service:8005")
-MD_SERVICE_URL = os.getenv("MD_SERVICE_URL", "http://md-service:8000")
-SENTINEL_SERVICE_URL = os.getenv("SENTINEL_SERVICE_URL", "http://sentinel-service:8000")
-ANALYSIS_SERVICE_URL = os.getenv("ANALYSIS_SERVICE_URL", "http://analysis-service:8000")
+MD_SERVICE_URL = os.getenv("MD_SERVICE_URL", "http://md-service:8006")
+SENTINEL_SERVICE_URL = os.getenv("SENTINEL_SERVICE_URL", "http://sentinel-service:8007")
+ANALYSIS_SERVICE_URL = os.getenv("ANALYSIS_SERVICE_URL", "http://analysis-service:8008")
 BRAIN_SERVICE_URL = os.getenv("BRAIN_SERVICE_URL", "http://brain-service:8000")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 TRAINING_TIMEOUT = int(os.getenv("TRAINING_TIMEOUT", "300"))
@@ -57,6 +57,7 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 API_KEY = os.getenv("API_KEY", "")  # Set to enable auth
 AUTH_DISABLED = os.getenv("AUTH_DISABLED", "false").lower() == "true"
 
+
 async def verify_api_key(request: Request):
     """Verify API key from header or query param"""
     if AUTH_DISABLED or not API_KEY:
@@ -66,16 +67,21 @@ async def verify_api_key(request: Request):
         return None
     raise HTTPException(status_code=401, detail="Invalid API key")
 
+
 def require_auth(endpoint_func):
     """Decorator to require auth for an endpoint"""
+
     @functools.wraps(endpoint_func)
     async def wrapper(request: Request, *args, **kwargs):
         await verify_api_key(request)
         return await endpoint_func(request, *args, **kwargs)
+
     return wrapper
+
 
 # Redis client for persistent LLM settings
 _redis_client = None
+
 
 def get_redis():
     global _redis_client
@@ -87,6 +93,7 @@ def get_redis():
             _redis_client = None
     return _redis_client
 
+
 # Default LLM settings
 _default_llm_settings = {
     "provider": "openai",
@@ -96,6 +103,7 @@ _default_llm_settings = {
     "temperature": 0.7,
     "max_tokens": 4096,
 }
+
 
 def load_llm_settings():
     """Load LLM settings from Redis or use defaults"""
@@ -111,6 +119,7 @@ def load_llm_settings():
             pass
     return _default_llm_settings.copy()
 
+
 def save_llm_settings(settings):
     """Save LLM settings to Redis"""
     r = get_redis()
@@ -123,6 +132,7 @@ def save_llm_settings(settings):
         except Exception:
             pass
     return False
+
 
 # LLM settings (loaded from Redis, persisted on update)
 llm_settings = load_llm_settings()
@@ -154,7 +164,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*" if AUTH_DISABLED else "http://localhost:3000,http://localhost:5173"],
+    allow_origins=["*"]
+    if AUTH_DISABLED
+    else ["http://localhost:3000", "http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -210,9 +222,9 @@ async def upload_file(file: UploadFile = File(...)):
 
         file_type = "unknown"
         ext = file_path.suffix.lower()
-        if ext in [".pdb", ".pdbqt"]:
+        if ext in [".pdbqt"]:
             file_type = "protein"
-        elif ext in [".sdf", ".mol", ".mol2", ".pdb"]:
+        elif ext in [".sdf", ".mol", ".mol2", ".pdb", ".smi"]:
             file_type = "ligand"
         elif ext in [".smiles", ".smi"]:
             file_type = "smiles"
@@ -458,7 +470,7 @@ async def cancel_docking_job(job_id: str):
     """Cancel a running docking job"""
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
-            response = await client.post(f"{DOCKING_SERVICE_URL}/cancel/{job_id}")
+            response = await client.post(f"{DOCKING_SERVICE_URL}/dock/{job_id}/cancel")
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
@@ -470,7 +482,7 @@ async def get_docking_results(job_id: str):
     """Get docking results"""
     async with httpx.AsyncClient(timeout=30.0) as client:
         try:
-            response = await client.get(f"{DOCKING_SERVICE_URL}/results/{job_id}")
+            response = await client.get(f"{DOCKING_SERVICE_URL}/dock/{job_id}/result")
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:

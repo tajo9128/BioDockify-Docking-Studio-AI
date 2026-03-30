@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiClient } from '@/lib/apiClient'
 
 interface DockingResult {
   id: number
@@ -27,13 +28,11 @@ export function Results() {
   const [activeTab, setActiveTab] = useState<'all' | 'docking' | 'md' | 'qsar'>('all')
 
   useEffect(() => {
-    fetch('/api/jobs')
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setJobs(data)
-          if (data.length > 0) setSelectedJob(data[0])
-        }
+    apiClient.get('/jobs')
+      .then(({ data }) => {
+        const jobs = Array.isArray(data) ? data : (data.jobs ?? [])
+        setJobs(jobs)
+        if (jobs.length > 0) setSelectedJob(jobs[0])
       })
       .catch(console.error)
   }, [])

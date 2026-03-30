@@ -14,14 +14,15 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Callable
-from abc import ABC, abstractmethod
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
+
+from tools import ToolRegistry, BaseTool, register_all_tools
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -47,65 +48,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-class BaseTool(ABC):
-    """Base class for tools (simplified from nanobot)"""
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def description(self) -> str:
-        pass
-
-    @property
-    @abstractmethod
-    def parameters(self) -> dict:
-        pass
-
-    @abstractmethod
-    async def execute(self, **kwargs) -> Any:
-        pass
-
-    def to_schema(self) -> dict:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
-        }
-
-
-class ToolRegistry:
-    """Simple tool registry with validation"""
-
-    def __init__(self):
-        self._tools: Dict[str, BaseTool] = {}
-
-    def register(self, tool: BaseTool) -> None:
-        self._tools[tool.name] = tool
-        logger.info(f"Registered tool: {tool.name}")
-
-    def get(self, name: str) -> Optional[BaseTool]:
-        return self._tools.get(name)
-
-    def list_tools(self) -> List[Dict]:
-        return [tool.to_schema()["function"] for tool in self._tools.values()]
-
-    async def execute(self, name: str, params: dict) -> Any:
-        tool = self.get(name)
-        if not tool:
-            return f"Error: Tool '{name}' not found"
-        try:
-            return await tool.execute(**params)
-        except Exception as e:
-            return f"Error: {str(e)}"
 
 
 class ConversationMemory:
@@ -243,7 +185,6 @@ class AnthropicProvider(LLMProvider):
             "https://api.anthropic.com/v1/messages",
             json=payload,
             headers={
-                "Authorization": f"Bearer {self.api_key}",
                 "x-api-key": self.api_key,
                 "anthropic-version": "2023-06-01",
             },
@@ -402,14 +343,12 @@ class ChatResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup():
-    from tools import register_all_tools
+    register_all_tools()
 
-    tools = register_all_tools()
-
-    for tool_def in tools.list_tools():
+    for tool_def in registry.list_tools():
         logger.info(f"Tool available: {tool_def['name']}")
 
-    logger.info(f"Brain service started with {len(tools.list_tools())} tools")
+    logger.info(f"Brain service started with {len(registry.list_tools())} tools")
 
 
 @app.get("/health")
@@ -449,6 +388,7 @@ async def chat(request: ChatRequest):
     p = await get_provider()
 
     try:
+        tools_used = []
         response = await p.chat(messages, tools)
 
         if "choices" in response:
@@ -464,7 +404,6 @@ async def chat(request: ChatRequest):
                 )
 
                 tool_results = []
-                tools_used = []
 
                 for tc in tool_calls:
                     func = tc["function"]
@@ -476,7 +415,15 @@ async def chat(request: ChatRequest):
                     )
 
                     tools_used.append(tool_name)
-                    result = await registry.execute(tool_name, args)
+                    tool = registry.get(tool_name)
+                    if tool:
+                        try:
+                            validated_input = tool.validate_input(args)
+                            result = await tool.execute(validated_input)
+                        except Exception as e:
+                            result = f"Error: {str(e)}"
+                    else:
+                        result = f"Error: Tool '{tool_name}' not found"
                     tool_results.append(
                         {"tool_call_id": tc["id"], "name": tool_name, "result": result}
                     )
@@ -506,14 +453,14 @@ async def chat(request: ChatRequest):
             conv_id,
             "assistant",
             final_content,
-            tools_used if "tools_used" in dir() else [],
+            tools_used,
         )
 
         settings = await get_llm_settings()
         return ChatResponse(
             response=final_content or "Completed",
             conversation_id=conv_id,
-            tools_used=tools_used if "tools_used" in dir() else [],
+            tools_used=tools_used,
             model=settings.get("model", "unknown"),
             provider=settings.get("provider", "openai"),
             available=True,
@@ -570,7 +517,7 @@ async def chat_status():
     settings = await get_llm_settings()
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.post(
+            response = await client.get(
                 f"{settings['base_url']}/models",
                 headers={"Authorization": f"Bearer {settings['api_key']}"},
             )

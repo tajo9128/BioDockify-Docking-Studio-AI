@@ -10,8 +10,8 @@ from tools import BaseTool, ToolInput, ToolOutput
 
 
 class DockingInput(ToolInput):
-    receptor_pdbqt: str
-    ligand_pdbqt: str
+    receptor_path: str
+    ligand_path: str
     exhaustiveness: int = 32
     num_modes: int = 10
     center_x: float = 0
@@ -32,11 +32,11 @@ class DockingTool(BaseTool):
     input_schema = {
         "type": "object",
         "properties": {
-            "receptor_pdbqt": {
+            "receptor_path": {
                 "type": "string",
                 "description": "Path to receptor PDBQT file",
             },
-            "ligand_pdbqt": {
+            "ligand_path": {
                 "type": "string",
                 "description": "Path to ligand PDBQT file",
             },
@@ -49,7 +49,7 @@ class DockingTool(BaseTool):
                 "description": "Number of binding modes (default: 10)",
             },
         },
-        "required": ["receptor_pdbqt", "ligand_pdbqt"],
+        "required": ["receptor_path", "ligand_path"],
     }
 
     async def execute(self, input_data: DockingInput) -> ToolOutput:
@@ -62,9 +62,8 @@ class DockingTool(BaseTool):
                 response = await client.post(
                     f"{DOCKING_SERVICE}/dock",
                     json={
-                        "job_id": f"dock_{id(input_data)}",
-                        "receptor_pdbqt": input_data.receptor_pdbqt,
-                        "ligand_pdbqt": input_data.ligand_pdbqt,
+                        "receptor_path": input_data.receptor_path,
+                        "ligand_path": input_data.ligand_path,
                         "exhaustiveness": input_data.exhaustiveness,
                         "num_modes": input_data.num_modes,
                         "center_x": input_data.center_x,
@@ -92,7 +91,7 @@ class DockingTool(BaseTool):
 
 
 class BatchDockingInput(ToolInput):
-    receptor_pdbqt: str
+    receptor_path: str
     ligand_library: str
     exhaustiveness: int = 32
 
@@ -107,7 +106,7 @@ class BatchDockingTool(BaseTool):
     input_schema = {
         "type": "object",
         "properties": {
-            "receptor_pdbqt": {
+            "receptor_path": {
                 "type": "string",
                 "description": "Path to receptor PDBQT file",
             },
@@ -120,7 +119,7 @@ class BatchDockingTool(BaseTool):
                 "description": "Docking exhaustiveness",
             },
         },
-        "required": ["receptor_pdbqt", "ligand_library"],
+        "required": ["receptor_path", "ligand_library"],
     }
 
     async def execute(self, input_data: BatchDockingInput) -> ToolOutput:
@@ -131,11 +130,11 @@ class BatchDockingTool(BaseTool):
         try:
             async with httpx.AsyncClient(timeout=3600.0) as client:
                 response = await client.post(
-                    f"{DOCKING_SERVICE}/batch",
+                    f"{DOCKING_SERVICE}/dock/async",
                     json={
                         "job_id": f"batch_{id(input_data)}",
-                        "receptor_pdbqt": input_data.receptor_pdbqt,
-                        "library_path": input_data.ligand_library,
+                        "receptor_path": input_data.receptor_path,
+                        "ligand_path": input_data.ligand_library,
                         "exhaustiveness": input_data.exhaustiveness,
                     },
                 )
