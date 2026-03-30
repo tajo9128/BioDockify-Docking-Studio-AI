@@ -51,8 +51,42 @@ UPLOADS_DIR = Path("/app/uploads")
 STORAGE_DIR.mkdir(exist_ok=True)
 UPLOADS_DIR.mkdir(exist_ok=True)
 
-# In-memory LLM settings (shared across services)
-llm_settings = {
+# Auth settings
+API_KEY = os.getenv("API_KEY", "")  # Set to enable auth
+AUTH_DISABLED = os.getenv("AUTH_DISABLED", "false").lower() == "true"
+
+async def verify_api_key(request: Request):
+    """Verify API key from header or query param"""
+    if AUTH_DISABLED or not API_KEY:
+        return None
+    key = request.headers.get("X-API-Key") or request.query_params.get("api_key")
+    if key == API_KEY:
+        return None
+    raise HTTPException(status_code=401, detail="Invalid API key")
+
+def require_auth(endpoint_func):
+    """Decorator to require auth for an endpoint"""
+    @functools.wraps(endpoint_func)
+    async def wrapper(request: Request, *args, **kwargs):
+        await verify_api_key(request)
+        return await endpoint_func(request, *args, **kwargs)
+    return wrapper
+
+# Redis client for persistent LLM settings
+_redis_client = None
+
+def get_redis():
+    global _redis_client
+    if _redis_client is None:
+        try:
+            _redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+            _redis_client.ping()
+        except Exception:
+            _redis_client = None
+    return _redis_client
+
+# Default LLM settings
+_default_llm_settings = {
     "provider": "openai",
     "model": "gpt-4o-mini",
     "api_key": "",
@@ -60,6 +94,36 @@ llm_settings = {
     "temperature": 0.7,
     "max_tokens": 4096,
 }
+
+def load_llm_settings():
+    """Load LLM settings from Redis or use defaults"""
+    r = get_redis()
+    if r:
+        try:
+            settings = r.hgetall("llm_settings")
+            if settings:
+                settings["temperature"] = float(settings.get("temperature", 0.7))
+                settings["max_tokens"] = int(settings.get("max_tokens", 4096))
+                return settings
+        except Exception:
+            pass
+    return _default_llm_settings.copy()
+
+def save_llm_settings(settings):
+    """Save LLM settings to Redis"""
+    r = get_redis()
+    if r:
+        try:
+            string_settings = {k: str(v) for k, v in settings.items()}
+            r.delete("llm_settings")
+            r.hset("llm_settings", mapping=string_settings)
+            return True
+        except Exception:
+            pass
+    return False
+
+# LLM settings (loaded from Redis, persisted on update)
+llm_settings = load_llm_settings()
 
 
 @asynccontextmanager
@@ -88,7 +152,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*" if AUTH_DISABLED else "http://localhost:3000,http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1932,10 +1996,11 @@ class LLMSettingsUpdate(BaseModel):
 
 @app.put("/llm/settings")
 async def update_llm_settings(settings: LLMSettingsUpdate):
-    """Update LLM settings"""
+    """Update LLM settings (persisted to Redis)"""
     global llm_settings
     update_data = settings.model_dump(exclude_none=True)
     llm_settings.update(update_data)
+    save_llm_settings(llm_settings)
     logger.info(
         f"LLM settings updated: provider={llm_settings['provider']}, model={llm_settings['model']}"
     )

@@ -10,6 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
+    g++ \
     libopenbabel7 \
     libhdf5-dev \
     libopenblas-dev \
@@ -33,10 +34,7 @@ RUN pip install --no-cache-dir \
     biopython \
     scipy \
     meeko \
-    gemmi \
-    openmmforcefields \
-    acpype \
-    parmed
+    gemmi
 
 RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 

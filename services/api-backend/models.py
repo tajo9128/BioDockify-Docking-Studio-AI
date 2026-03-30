@@ -160,7 +160,7 @@ class MemoryEntry(Base):
     value = Column(Text, nullable=True)
     confidence = Column(Float, default=1.0)
     tags = Column(ARRAY(String), nullable=True)
-    extra_data = Column(JSON, default={})
+    metadata = Column(JSON, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -172,7 +172,7 @@ class ConversationHistory(Base):
     user_id = Column(String(255), nullable=False, index=True)
     role = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
-    extra_data = Column(JSON, default={})
+    metadata = Column(JSON, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
