@@ -131,18 +131,18 @@ def run_vina_docking(
         return {
             "success": False,
             "error": "Vina Python package not installed",
-            "results": [],
+            "poses": [],
         }
 
     os.makedirs(output_dir, exist_ok=True)
 
     receptor_file = prepare_receptor_file(receptor_path, output_dir)
     if receptor_file is None:
-        return {"success": False, "error": "Failed to prepare receptor", "results": []}
+        return {"success": False, "error": "Failed to prepare receptor", "poses": []}
 
     ligand_file = prepare_ligand_file(ligand_path, output_dir)
     if ligand_file is None:
-        return {"success": False, "error": "Failed to prepare ligand", "results": []}
+        return {"success": False, "error": "Failed to prepare ligand", "poses": []}
 
     try:
         logger.info("Initializing Vina...")
@@ -179,13 +179,13 @@ def run_vina_docking(
         return {
             "success": True,
             "engine": "vina",
-            "results": results,
+            "poses": results,
             "output_file": output_file if os.path.exists(output_file) else None,
         }
 
     except Exception as e:
         logger.error(f"Vina docking error: {e}")
-        return {"success": False, "error": str(e), "results": []}
+        return {"success": False, "error": str(e), "poses": []}
 
 
 def run_gnina_docking(
@@ -202,17 +202,17 @@ def run_gnina_docking(
     output_dir: str = "/tmp",
 ) -> Dict[str, Any]:
     if not check_gnina():
-        return {"success": False, "error": "GNINA not installed", "results": []}
+        return {"success": False, "error": "GNINA not installed", "poses": []}
 
     os.makedirs(output_dir, exist_ok=True)
 
     receptor_file = prepare_receptor_file(receptor_path, output_dir)
     if receptor_file is None:
-        return {"success": False, "error": "Failed to prepare receptor", "results": []}
+        return {"success": False, "error": "Failed to prepare receptor", "poses": []}
 
     ligand_file = prepare_ligand_file(ligand_path, output_dir)
     if ligand_file is None:
-        return {"success": False, "error": "Failed to prepare ligand", "results": []}
+        return {"success": False, "error": "Failed to prepare ligand", "poses": []}
 
     output_file = os.path.join(output_dir, "gnina_results.pdbqt")
     log_file = os.path.join(output_dir, "gnina_log.txt")
@@ -253,7 +253,7 @@ def run_gnina_docking(
 
         if result.returncode != 0:
             logger.error(f"GNINA failed: {result.stderr}")
-            return {"success": False, "error": result.stderr, "results": []}
+            return {"success": False, "error": result.stderr, "poses": []}
 
         results = []
         if os.path.exists(log_file):
@@ -290,13 +290,13 @@ def run_gnina_docking(
             return {
                 "success": False,
                 "error": "Failed to parse GNINA output",
-                "results": [],
+                "poses": [],
             }
 
         return {
             "success": True,
             "engine": "gnina",
-            "results": results,
+            "poses": results,
             "output_file": output_file,
         }
 
@@ -304,11 +304,11 @@ def run_gnina_docking(
         return {
             "success": False,
             "error": "GNINA timeout (10 min exceeded)",
-            "results": [],
+            "poses": [],
         }
     except Exception as e:
         logger.error(f"GNINA error: {e}")
-        return {"success": False, "error": str(e), "results": []}
+        return {"success": False, "error": str(e), "poses": []}
 
 
 def run_docking(
@@ -383,8 +383,8 @@ def run_docking(
             output_dir,
         )
 
-        vina_poses = vina_result.get("results", [])
-        gnina_poses = gnina_result.get("results", [])
+        vina_poses = vina_result.get("poses", [])
+        gnina_poses = gnina_result.get("poses", [])
 
         consensus_results = []
         for i, (vp, gp) in enumerate(zip(vina_poses, gnina_poses)):
@@ -417,6 +417,52 @@ def run_docking(
         "success": False,
         "error": f"Unknown engine: {engine}. Use: vina, gnina, consensus",
         "results": [],
+    }
+
+
+def run_consensus(receptor, ligand, center, size, exhaustiveness, num_modes):
+    vina_result = run_vina_docking(receptor, ligand, center[0], center[1], center[2],
+                                    size[0], size[1], size[2], exhaustiveness, num_modes)
+
+    if not check_gnina():
+        logger.warning("GNINA not installed, running Vina-only consensus")
+        for pose in vina_result.get("poses", []):
+            pose["consensus_score"] = pose.get("vina_score")
+        vina_result["gnina_available"] = False
+        vina_result["consensus_note"] = "GNINA not installed - consensus uses Vina scores only"
+        return vina_result
+
+    gnina_result = run_gnina_docking(receptor, ligand, center[0], center[1], center[2],
+                                     size[0], size[1], size[2], exhaustiveness, num_modes)
+
+    if not gnina_result.get("success"):
+        logger.warning(f"GNINA failed: {gnina_result.get('error')}, using Vina only")
+        for pose in vina_result.get("poses", []):
+            pose["consensus_score"] = pose.get("vina_score")
+        vina_result["gnina_available"] = False
+        vina_result["consensus_note"] = f"GNINA failed - {gnina_result.get('error', 'unknown error')}"
+        return vina_result
+
+    consensus_poses = []
+    vina_poses = vina_result.get("poses", [])
+    gnina_poses = gnina_result.get("poses", [])
+
+    for i, (vina_pose, gnina_pose) in enumerate(zip(vina_poses, gnina_poses)):
+        vina_score = vina_pose.get("vina_score", 0)
+        gnina_score = gnina_pose.get("gnina_score", vina_score)
+        consensus_score = (vina_score + gnina_score) / 2
+
+        pose = vina_pose.copy()
+        pose["gnina_score"] = gnina_score
+        pose["consensus_score"] = consensus_score
+        pose["rf_score"] = gnina_pose.get("rf_score")
+        consensus_poses.append(pose)
+
+    return {
+        "success": True,
+        "poses": consensus_poses,
+        "gnina_available": True,
+        "consensus_note": "Scores averaged from Vina and GNINA"
     }
 
 
