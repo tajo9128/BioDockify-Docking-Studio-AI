@@ -30,11 +30,16 @@ An intelligent molecular docking platform with Discovery Studio-inspired UI, AI-
 - TPSA (Topological Polar Surface Area)
 - Rotatable bonds analysis
 
-### 🧪 Docking
-- AutoDock Vina integration
-- GNINA deep learning docking (CNN scoring)
-- SMILES to PDB/PDBQT preparation
-- Real-time job tracking
+### 🧪 Molecular Docking
+- **AutoDock Vina 1.2** — High-precision empirical scoring function
+- **GNINA** — CNN-based deep learning scoring (CNN, CNN affinity, CNN pose)
+- **RF (Random Forest) Score** — Machine learning based rescoring
+- **vinardo** — Optimized empirical scoring function
+- SMILES to PDB/PDBQT preparation (Meeko + RDKit)
+- Flexible ligand & rigid receptor docking
+- Grid box auto-detection
+- Batch docking (multiple ligands)
+- Real-time job tracking & pose visualization
 
 ### 📊 Molecular Dynamics
 - OpenMM simulation engine
@@ -137,6 +142,8 @@ Pre-loaded with 12 FDA-approved drugs:
 │  ├── GET  /api/docking/jobs               (list all jobs)            │
 │  ├── GET  /api/docking/jobs/{id}          (get job details)           │
 │  ├── POST /api/docking/run                 (run AutoDock Vina)         │
+│  ├── POST /api/docking/gnina              (run GNINA CNN docking)     │
+│  ├── POST /api/docking/rescore             (RF/CNN rescoring)          │
 │  ├── GET  /api/docking/results/{id}        (docking scores/poses)     │
 │  ├── POST /api/chem/properties             (RDKit molecular calc)      │
 │  ├── POST /api/chem/suggestions            (drug-likeness analysis)    │
@@ -147,10 +154,10 @@ Pre-loaded with 12 FDA-approved drugs:
 │  └── POST /api/chem/optimize              (AI molecular optimization)  │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  Container (python:3.11-slim)                                           │
-│  ├── rdkit-pypi==2022.9.5 (properties, prep, analysis)                │
-│  ├── autodock-vina            (molecular docking engine)              │
-│  ├── gnina                    (CNN deep learning docking)             │
-│  ├── openmm                   (MD simulations, GPU-accelerated)       │
+│  ├── rdkit-pypi==2022.9.5     (properties, prep, analysis)            │
+│  ├── autodock-vina            (empirical & vinardo scoring)          │
+│  ├── gnina                    (CNN/RF deep learning docking)         │
+│  ├── openmm                   (MD simulations, GPU-accelerated)     │
 │  ├── fastapi + uvicorn         (web framework)                        │
 │  ├── biopython                (protein structure handling)            │
 │  ├── meeko                    (ligand preparation for Vina)           │
