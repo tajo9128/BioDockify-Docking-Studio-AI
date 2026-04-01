@@ -627,6 +627,78 @@ def api_docking_run(req: DockingRunRequest):
     except Exception as e:
         logger.error(f"Failed to save results: {e}")
     
+    # Try smart docking if we have proper files
+    if receptor_path and ligand_path:
+        try:
+            from docking_engine import smart_dock, check_gpu_cuda
+            
+            logger.info(f"[SmartDock] Running smart docking for job {job_id}")
+            gpu_info = check_gpu_cuda()
+            logger.info(f"[SmartDock] GPU Status: {gpu_info}")
+            
+            # Use smart docking pipeline
+            docking_result = smart_dock(
+                receptor_path=receptor_path,
+                ligand_path=ligand_path,
+                center_x=req.center_x,
+                center_y=req.center_y,
+                center_z=req.center_z,
+                size_x=req.size_x,
+                size_y=req.size_y,
+                size_z=req.size_z,
+                exhaustiveness=req.exhaustiveness,
+                num_modes=req.num_modes,
+                output_dir=STORAGE_DIR
+            )
+            
+            logger.info(f"[SmartDock] Result: engine={docking_result.get('engine')}, pipeline={docking_result.get('pipeline')}")
+            
+            # Format results for frontend
+            smart_results = []
+            for r in docking_result.get("results", []):
+                smart_results.append({
+                    "mode": r.get("mode", r.get("pose_id", 1)),
+                    "vina_score": r.get("vina_score"),
+                    "gnina_score": r.get("gnina_score"),
+                    "rf_score": r.get("rf_score"),
+                    "consensus": r.get("consensus_score"),
+                    "cnn_affinity": r.get("cnn_affinity"),
+                })
+            
+            best_score = docking_result.get("best_score") or vina_scores[0]
+            
+            # Update database with smart docking results
+            try:
+                for r in smart_results:
+                    add_docking_result(
+                        job_id,
+                        r["mode"],
+                        "uploaded_ligand",
+                        vina_score=r.get("vina_score"),
+                        gnina_score=r.get("gnina_score"),
+                        rf_score=r.get("rf_score")
+                    )
+                update_job_status(job_id, "completed", best_score)
+            except Exception as e:
+                logger.error(f"Failed to update smart docking results: {e}")
+            
+            return {
+                "job_id": job_id,
+                "status": "completed",
+                "engine": docking_result.get("engine", req.scoring),
+                "pipeline": docking_result.get("pipeline", "vina"),
+                "gpu_used": docking_result.get("gpu_used", False),
+                "gpu_info": gpu_info,
+                "best_score": best_score,
+                "reason": docking_result.get("reason", ""),
+                "results": smart_results,
+                "message": f"Smart docking complete using {docking_result.get('pipeline', 'vina')} pipeline"
+            }
+        except ImportError as e:
+            logger.warning(f"[SmartDock] Import error: {e} - using fallback results")
+        except Exception as e:
+            logger.error(f"[SmartDock] Error: {e} - using fallback results")
+    
     return {"job_id": job_id, "status": "completed", "results": results,
             "message": f"Docking complete - {len(results)} poses generated"}
 
@@ -1048,13 +1120,27 @@ def get_gpu_status():
                             "temperature": int(parts[5]),
                         }
                     )
-            return {"available": True, "gpus": gpus}
+            return {
+                "available": True, 
+                "gpus": gpus,
+                "recommended_pipeline": "vina_gpu",
+                "vina_available": check_vina(),
+                "gnina_available": check_gnina(),
+                "note": "GPU detected - AutoDock Vina GPU will be used for fast docking"
+            }
     except FileNotFoundError:
         pass
     except Exception as e:
         logger.warning(f"GPU detection error: {e}")
 
-    return {"available": False, "gpus": [], "message": "No GPU detected"}
+    return {
+        "available": False, 
+        "gpus": [], 
+        "message": "No GPU detected",
+        "recommended_pipeline": "gnina_rf" if check_vina() else "simulated",
+        "vina_available": check_vina(),
+        "gnina_available": check_gnina()
+    }
 
 
 # ============================================================
