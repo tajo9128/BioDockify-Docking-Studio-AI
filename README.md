@@ -1,4 +1,4 @@
-# Biodockify Studio AI
+# Biodockify Docking Studio AI
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-2.3.4-blue.svg" alt="Version">
