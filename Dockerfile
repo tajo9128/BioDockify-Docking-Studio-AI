@@ -23,12 +23,11 @@ ENV PYTHONUNBUFFERED=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
+    bzip2 \
+    ca-certificates \
+    tzdata \
     supervisor \
-    libopenbabel7 \
-    libhdf5-dev \
-    libopenblas-dev \
     libglib2.0-0 \
-    libgfortran5 \
     libsm6 \
     libxml2 \
     libxslt1.1 \
@@ -36,13 +35,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-RUN pip install --no-cache-dir \
-    six && \
-    pip install --no-cache-dir \
-    vina \
+# Install Miniconda for conda-forge packages (vina, rdkit, meeko)
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/conda && \
+    rm /tmp/miniconda.sh && \
+    /opt/conda/bin/conda clean -afy
+
+ENV PATH=/opt/conda/bin:$PATH
+
+# Install scientific stack from conda-forge
+RUN conda install -y -c conda-forge \
     rdkit \
-    meeko
+    vina \
+    meeko \
+    boost \
+    boost-cpp \
+    && conda clean -afy
 
 # Set working directory
 WORKDIR /app

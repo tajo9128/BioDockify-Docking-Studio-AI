@@ -1,5 +1,5 @@
 # BioDockify Studio AI - Single Container
-# All-in-one: React frontend + FastAPI backend + RDKit
+# All-in-one: React frontend + FastAPI backend + Vina/RDKit/Meeko
 
 # Stage 1: Build React frontend
 FROM node:20-alpine AS frontend-builder
@@ -9,11 +9,11 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Python backend with RDKit
+# Stage 2: Python + conda for scientific stack
 FROM python:3.11-slim
 
 LABEL maintainer="BioDockify"
-LABEL description="BioDockify Studio AI - Single container with RDKit"
+LABEL description="BioDockify Studio AI - Single container with RDKit, Vina, Meeko"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -22,12 +22,27 @@ ENV PYTHONDONTWRITEBYTECODE=1
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget curl bzip2 ca-certificates tzdata libopenbabel7 libhdf5-dev \
-    libopenblas-dev libglib2.0-0 libgfortran5 libsm6 libxml2 \
-    libxslt1.1 libxrender1 libxext6 && rm -rf /var/lib/apt/lists/*
+    wget curl bzip2 ca-certificates tzdata \
+    libglib2.0-0 libsm6 libxml2 libxslt1.1 libxrender1 libxext6 \
+    && rm -rf /var/lib/apt/lists/*
 
+# Install Miniconda for conda-forge packages (vina, rdkit, meeko)
+RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/conda && \
+    rm /tmp/miniconda.sh && \
+    /opt/conda/bin/conda clean -afy
+
+ENV PATH=/opt/conda/bin:$PATH
+
+# Install scientific stack from conda-forge
+RUN conda install -y -c conda-forge \
+    rdkit \
+    vina \
+    meeko \
+    && conda clean -afy
+
+# Install Python web framework via pip
 RUN pip install --no-cache-dir \
-    rdkit-pypi==2022.9.5 \
     fastapi==0.109.2 \
     uvicorn[standard]==0.27.1 \
     python-multipart==0.0.9 \
@@ -35,7 +50,6 @@ RUN pip install --no-cache-dir \
     httpx==0.26.0 \
     sqlalchemy \
     biopython \
-    numpy \
     requests
 
 COPY backend/requirements.txt /app/backend/requirements.txt
@@ -43,8 +57,7 @@ COPY backend/ /app/backend/
 
 COPY --from=frontend-builder /app/frontend/dist /app/backend/static/
 
-RUN mkdir -p /app/backend/storage && \
-    mkdir -p /app/backend/static/assets
+RUN mkdir -p /app/backend/storage /app/backend/static/assets
 
 EXPOSE 8000
 
