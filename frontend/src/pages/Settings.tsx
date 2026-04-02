@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTheme } from '@/contexts/ThemeContext'
+import { useAccessibility } from '@/contexts/AccessibilityContext'
+import { locales, getLocale, setLocale, Locale } from '@/i18n'
 
 const APP_VERSION = '2.4.0'
 
@@ -103,13 +105,15 @@ export function Settings() {
   const { theme, setTheme } = useTheme()
   const isDark = theme === 'dark'
   
-  const [activeTab, setActiveTab] = useState<'llm' | 'notifications' | 'plugins' | 'system' | 'about'>('llm')
+  const [activeTab, setActiveTab] = useState<'llm' | 'notifications' | 'plugins' | 'system' | 'about' | 'language' | 'accessibility'>('llm')
   const [showApiKey, setShowApiKey] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [fetchingModels, setFetchingModels] = useState(false)
   const [testResult, setTestResult] = useState<{ status: string; response?: string; error?: string } | null>(null)
   const [message, setMessage] = useState('')
+  const { highContrast, reducedMotion, fontSize, toggleHighContrast, toggleReducedMotion, setFontSize } = useAccessibility()
+  const [currentLocale, setCurrentLocale] = useState<Locale>(getLocale())
   const [availableOllamaModels, setAvailableOllamaModels] = useState<string[]>([])
 
   const [emailConfig, setEmailConfig] = useState({
@@ -300,6 +304,8 @@ export function Settings() {
             { key: 'plugins', label: 'Plugins', icon: '🔌' },
             { key: 'system', label: 'System', icon: '⚙️' },
             { key: 'about', label: 'About', icon: 'ℹ️' },
+            { key: 'language', label: 'Language', icon: '🌐' },
+            { key: 'accessibility', label: 'Accessibility', icon: '♿' },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -900,6 +906,68 @@ export function Settings() {
                     <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{f.desc}</div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'language' && (
+          <div className="space-y-6">
+            <div className={`rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}>
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-semibold">🌐 Language</h2>
+                <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Choose your preferred language</p>
+              </div>
+              <div className="p-6 grid grid-cols-2 gap-3">
+                {locales.map(loc => (
+                  <button
+                    key={loc.code}
+                    onClick={() => { setLocale(loc.code); setCurrentLocale(loc.code) }}
+                    className={`p-4 rounded-lg border text-left transition-colors ${
+                      currentLocale === loc.code
+                        ? isDark ? 'bg-blue-900/50 border-blue-500' : 'bg-blue-50 border-blue-500'
+                        : isDark ? 'bg-gray-700 border-gray-600 hover:border-gray-500' : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-medium">{loc.name}</div>
+                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{loc.code.toUpperCase()} • {loc.dir === 'rtl' ? 'RTL' : 'LTR'}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'accessibility' && (
+          <div className="space-y-6">
+            <div className={`rounded-xl border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} shadow-sm`}>
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-semibold">♿ Accessibility</h2>
+                <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Customize the interface for your needs</p>
+              </div>
+              <div className="p-6 space-y-4">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={highContrast} onChange={toggleHighContrast} className="w-5 h-5 rounded" />
+                  <div>
+                    <p className="font-medium">High Contrast Mode</p>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Increase contrast for better visibility</p>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" checked={reducedMotion} onChange={toggleReducedMotion} className="w-5 h-5 rounded" />
+                  <div>
+                    <p className="font-medium">Reduced Motion</p>
+                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Minimize animations and transitions</p>
+                  </div>
+                </label>
+                <div>
+                  <p className="font-medium mb-2">Font Size: {fontSize}px</p>
+                  <input type="range" min="12" max="24" value={fontSize} onChange={e => setFontSize(Number(e.target.value))} className="w-full" />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Small (12px)</span>
+                    <span>Large (24px)</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
