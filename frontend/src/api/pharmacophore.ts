@@ -155,20 +155,14 @@ export interface ExclusionVolumeResult {
   error?: string
 }
 
-export async function generateHypothesis(activeSmiles: string[], minFeatures: number = 3, maxFeatures: number = 6): Promise<HypothesisResult> {
-  const { data } = await apiClient.post('/pharmacophore/hypothesis', {
-    active_smiles: activeSmiles,
-    min_features: minFeatures,
-    max_features: maxFeatures
-  })
-  return data
+export async function generateHypothesis(_activeSmiles: string[], _minFeatures: number = 3, _maxFeatures: number = 6): Promise<HypothesisResult> {
+  // Note: Backend route not yet implemented - placeholder
+  console.warn('Hypothesis generation endpoint not available on backend')
+  return { success: false, error: 'Hypothesis generation not yet available' }
 }
 
-export async function generateExclusionVolumes(receptorPdb: string, ligandCenter?: number[], cutoff: number = 5.0): Promise<ExclusionVolumeResult> {
-  const { data } = await apiClient.post('/pharmacophore/exclusion-volumes', {
-    receptor_pdb: receptorPdb,
-    ligand_center: ligandCenter,
-    cutoff
-  })
-  return data
+export async function generateExclusionVolumes(_receptorPdb: string, _ligandCenter?: number[], _cutoff: number = 5.0): Promise<ExclusionVolumeResult> {
+  // Note: Backend route not yet implemented - placeholder
+  console.warn('Exclusion volumes endpoint not available on backend')
+  return { success: false, error: 'Exclusion volumes not yet available' }
 }

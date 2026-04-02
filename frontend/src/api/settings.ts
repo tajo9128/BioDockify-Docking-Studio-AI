@@ -32,3 +32,17 @@ export async function getOllamaModels(): Promise<{ available: boolean; models: s
     return { available: false, models: [], error: 'Failed to fetch Ollama models' }
   }
 }
+
+export async function getLLMConfig(): Promise<any> {
+  try {
+    const { data } = await apiClient.get('/llm/config')
+    return data
+  } catch {
+    return { error: 'LLM config endpoint not available' }
+  }
+}
+
+export async function configureLLM(config: any): Promise<any> {
+  const { data } = await apiClient.post('/llm/configure', config)
+  return data
+}

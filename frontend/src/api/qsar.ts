@@ -199,23 +199,26 @@ export async function deleteModel(modelId: string): Promise<{ success: boolean }
   return data
 }
 
-export async function runYScrambling(request: {
+export async function runYScrambling(_request: {
   smiles_list: string[]
   activity_column: string
   model_type?: string
   n_iterations?: number
   cv_folds?: number
 }): Promise<any> {
-  const { data } = await apiClient.post('/qsar/validate/y-scrambling', request)
-  return data
+  // Note: Backend route not yet implemented - placeholder
+  console.warn('Y-Scrambling validation endpoint not available on backend')
+  return { success: false, error: 'Y-Scrambling not yet available' }
 }
 
-export async function getSHAPImportance(modelId: string, topN: number = 20): Promise<any> {
-  const { data } = await apiClient.get(`/qsar/validate/shap/${modelId}`, { params: { top_n: topN } })
-  return data
+export async function getSHAPImportance(_modelId: string, _topN: number = 20): Promise<any> {
+  // Note: Backend route not yet implemented - placeholder
+  console.warn('SHAP importance endpoint not available on backend')
+  return { success: false, error: 'SHAP analysis not yet available' }
 }
 
-export async function getWilliamsPlot(modelId: string): Promise<any> {
-  const { data } = await apiClient.get(`/qsar/validate/williams-plot/${modelId}`)
-  return data
+export async function getWilliamsPlot(_modelId: string): Promise<any> {
+  // Note: Backend route not yet implemented - placeholder
+  console.warn('Williams plot endpoint not available on backend')
+  return { success: false, error: 'Williams plot not yet available' }
 }

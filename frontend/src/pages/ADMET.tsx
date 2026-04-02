@@ -37,7 +37,18 @@ export function ADMET() {
     setError(null)
     setSingleResult(null)
     try {
-      const res = await fetch(`/admet/predict?smiles=${encodeURIComponent(smiles.trim())}`)
+      const res = await fetch('/admet/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smiles: smiles.trim(),
+          predict_absorption: true,
+          predict_distribution: true,
+          predict_metabolism: true,
+          predict_excretion: true,
+          predict_toxicity: true,
+        }),
+      })
       const data = await res.json()
       if (data.error) {
         setError(data.error)
