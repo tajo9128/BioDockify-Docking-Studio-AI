@@ -11,6 +11,12 @@ interface DockingResult {
   rf_score: number | null
   consensus: number | null
   pdb_data: string | null
+  hydrophobic_term?: number
+  rotatable_penalty?: number
+  lipo_contact?: number
+  final_score?: number
+  composite_score?: number
+  constraint_penalty?: number
 }
 
 interface Job {
@@ -33,6 +39,7 @@ export function Results() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   const [selectedResults, setSelectedResults] = useState<DockingResult[]>([])
+  const [selectedPose, setSelectedPose] = useState<DockingResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'all' | 'completed' | 'running' | 'failed'>('all')
 
@@ -302,7 +309,8 @@ export function Results() {
 
             {/* Docking Results Table */}
             {selectedResults.length > 0 && (
-              <div className={`${cardBg} rounded-xl ${borderClass} border`}>
+              <>
+              <div className={`${cardBg} rounded-xl ${borderClass} border mb-6`}>
                 <div className={`p-4 ${borderClass} border-b`}>
                   <h2 className={`font-semibold ${textClass}`}>Docking Poses</h2>
                   <p className={`text-sm ${subtextClass} mt-1`}>
@@ -319,12 +327,13 @@ export function Results() {
                         <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase tracking-wider`}>CNN Score</th>
                         <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase tracking-wider`}>RF Score</th>
                         <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase tracking-wider`}>Consensus</th>
+                        <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase tracking-wider`}>Composite</th>
                         <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase tracking-wider`}>Actions</th>
                       </tr>
                     </thead>
                     <tbody className={`divide-y ${borderClass}`}>
                       {selectedResults.map((result, i) => (
-                        <tr key={result.id} className={`${hoverClass} transition-colors ${i === 0 ? (isDark ? 'bg-green-900/20' : 'bg-green-50') : ''}`}>
+                        <tr key={result.id} className={`${hoverClass} transition-colors cursor-pointer ${selectedPose?.id === result.id ? (isDark ? 'bg-blue-900/30' : 'bg-blue-50') : ''} ${i === 0 ? (isDark ? 'bg-green-900/20' : 'bg-green-50') : ''}`} onClick={() => setSelectedPose(result)}>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
                               i === 0 
@@ -357,8 +366,19 @@ export function Results() {
                             {result.consensus?.toFixed(2) || '-'}
                           </td>
                           <td className="px-6 py-4">
-                            <button className={`text-sm font-medium ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'}`}>
-                              View
+                            <span className={`font-bold text-sm ${
+                              (result.composite_score ?? result.final_score ?? 0) < -8
+                                ? 'text-green-600'
+                                : (result.composite_score ?? result.final_score ?? 0) < -6
+                                  ? 'text-yellow-600'
+                                  : isDark ? 'text-gray-300' : 'text-gray-700'
+                            }`}>
+                              {(result.composite_score ?? result.final_score ?? result.vina_score)?.toFixed(2) || '-'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <button className={`text-sm font-medium ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'}`} onClick={(e) => { e.stopPropagation(); setSelectedPose(result); }}>
+                              Details
                             </button>
                           </td>
                         </tr>
@@ -367,6 +387,108 @@ export function Results() {
                   </table>
                 </div>
               </div>
+
+              {/* Scoring Breakdown Panel */}
+              {selectedPose && (
+                <div className={`${cardBg} rounded-xl ${borderClass} border mb-6`}>
+                  <div className={`p-4 ${borderClass} border-b flex items-center justify-between`}>
+                    <h2 className={`font-semibold ${textClass}`}>🔬 Scoring Breakdown — {selectedPose.ligand_name || `Pose ${selectedPose.pose_id}`}</h2>
+                    <button onClick={() => setSelectedPose(null)} className={`text-sm ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}>✕ Close</button>
+                  </div>
+                  <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h3 className={`font-semibold mb-3 ${textClass}`}>Scoring Terms</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className={`text-sm ${subtextClass}`}>Vina Score</span>
+                          <span className={`font-mono font-bold ${
+                            (selectedPose.vina_score || 0) < -8 ? 'text-green-600' : (selectedPose.vina_score || 0) < -6 ? 'text-yellow-600' : isDark ? 'text-gray-300' : 'text-gray-700'
+                          }`}>{selectedPose.vina_score?.toFixed(2) || '-'} kcal/mol</span>
+                        </div>
+                        {selectedPose.gnina_score != null && (
+                          <div className="flex justify-between items-center">
+                            <span className={`text-sm ${subtextClass}`}>GNINA CNN Score</span>
+                            <span className="font-mono text-purple-600 font-bold">{selectedPose.gnina_score.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {selectedPose.rf_score != null && (
+                          <div className="flex justify-between items-center">
+                            <span className={`text-sm ${subtextClass}`}>RF Score</span>
+                            <span className="font-mono text-blue-600 font-bold">{selectedPose.rf_score.toFixed(2)}</span>
+                          </div>
+                        )}
+                        {selectedPose.hydrophobic_term != null && (
+                          <div className="flex justify-between items-center">
+                            <span className={`text-sm ${subtextClass}`}>Hydrophobic Term</span>
+                            <span className="font-mono font-bold">{selectedPose.hydrophobic_term.toFixed(3)}</span>
+                          </div>
+                        )}
+                        {selectedPose.rotatable_penalty != null && (
+                          <div className="flex justify-between items-center">
+                            <span className={`text-sm ${subtextClass}`}>Rotatable Penalty</span>
+                            <span className="font-mono font-bold">{selectedPose.rotatable_penalty.toFixed(3)}</span>
+                          </div>
+                        )}
+                        {selectedPose.lipo_contact != null && (
+                          <div className="flex justify-between items-center">
+                            <span className={`text-sm ${subtextClass}`}>Lipophilic Contact</span>
+                            <span className="font-mono font-bold">{selectedPose.lipo_contact.toFixed(3)}</span>
+                          </div>
+                        )}
+                        {selectedPose.constraint_penalty != null && (
+                          <div className="flex justify-between items-center">
+                            <span className={`text-sm ${subtextClass}`}>Constraint Penalty</span>
+                            <span className="font-mono font-bold text-orange-600">{selectedPose.constraint_penalty.toFixed(3)}</span>
+                          </div>
+                        )}
+                        <div className={`border-t pt-2 mt-2 flex justify-between items-center ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                          <span className={`font-semibold ${textClass}`}>Composite Score</span>
+                          <span className={`font-mono font-bold text-lg ${
+                            (selectedPose.composite_score ?? selectedPose.final_score ?? 0) < -8 ? 'text-green-600' : (selectedPose.composite_score ?? selectedPose.final_score ?? 0) < -6 ? 'text-yellow-600' : isDark ? 'text-gray-300' : 'text-gray-700'
+                          }`}>{(selectedPose.composite_score ?? selectedPose.final_score ?? selectedPose.vina_score)?.toFixed(2) || '-'} kcal/mol</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className={`font-semibold mb-3 ${textClass}`}>Pose Quality Assessment</h3>
+                      <div className={`rounded-lg p-4 ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-3 h-3 rounded-full ${(selectedPose.vina_score || 0) < -8 ? 'bg-green-500' : (selectedPose.vina_score || 0) < -6 ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                            <span className={`text-sm ${textClass}`}>
+                              {(selectedPose.vina_score || 0) < -8 ? 'Strong binding affinity' : (selectedPose.vina_score || 0) < -6 ? 'Moderate binding affinity' : 'Weak binding affinity'}
+                            </span>
+                          </div>
+                          {selectedPose.gnina_score != null && (
+                            <div className="flex items-center gap-2">
+                              <span className={`w-3 h-3 rounded-full ${selectedPose.gnina_score > 0.5 ? 'bg-green-500' : selectedPose.gnina_score > 0 ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                              <span className={`text-sm ${textClass}`}>
+                                CNN score: {selectedPose.gnina_score > 0.5 ? 'High pose quality' : selectedPose.gnina_score > 0 ? 'Moderate pose quality' : 'Low pose quality'}
+                              </span>
+                            </div>
+                          )}
+                          {selectedPose.consensus != null && (
+                            <div className="flex items-center gap-2">
+                              <span className={`w-3 h-3 rounded-full ${selectedPose.consensus < -7 ? 'bg-green-500' : selectedPose.consensus < -5 ? 'bg-yellow-500' : 'bg-red-500'}`} />
+                              <span className={`text-sm ${textClass}`}>
+                                Consensus: {selectedPose.consensus < -7 ? 'Strong agreement between scoring functions' : 'Moderate agreement'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {selectedPose.pdb_data && (
+                        <div className="mt-4">
+                          <button className={`text-sm font-medium ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-800'}`}>
+                            📥 Download PDB
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              </>
             )}
 
             {/* No Results */}
