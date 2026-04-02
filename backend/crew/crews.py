@@ -110,7 +110,7 @@ def create_lead_optimization_crew(llm=None) -> Crew:
     )
 
     return Crew(
-        agents=[docking_agent, analysis_agent, chemistry_agent, docking_agent, orchestrator],
+        agents=[docking_agent, analysis_agent, chemistry_agent, orchestrator],
         tasks=[initial_dock_task, analyze_task, optimize_task, redock_task, final_analysis_task],
         process=Process.sequential,
         verbose=True,

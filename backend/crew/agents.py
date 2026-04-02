@@ -13,6 +13,35 @@ from crew.tools.data_tools import fetch_compound, search_compounds, fetch_protei
 from crew.tools.notification_tools import send_notification
 
 
+def _get_llm(llm=None):
+    """Get CrewAI-compatible LLM object"""
+    if llm is not None:
+        return llm
+    try:
+        from crewai import LLM
+        from ai.llm_router import _load_config, PROVIDER_URLS
+        
+        config = _load_config()
+        provider = config.get("provider", "ollama")
+        model = config.get("model", "llama3.2")
+        api_key = config.get("api_key", "")
+        
+        base_url = PROVIDER_URLS.get(provider, PROVIDER_URLS["ollama"])
+        
+        if provider == "ollama":
+            return LLM(model=f"ollama/{model}", base_url=base_url, temperature=0.0)
+        elif api_key:
+            return LLM(model=model, base_url=base_url, api_key=api_key, temperature=0.0)
+        else:
+            return LLM(model=f"ollama/{model}", base_url=base_url, temperature=0.0)
+    except Exception:
+        try:
+            from crewai import LLM
+            return LLM(model="ollama/llama3.2", base_url="http://host.docker.internal:11434/v1", temperature=0.0)
+        except Exception:
+            return None
+
+
 def create_docking_agent(llm=None) -> Agent:
     """Molecular Docking Specialist - Runs Vina/GNINA/RF docking"""
     return Agent(
@@ -25,7 +54,7 @@ You understand when to use AutoDock Vina, GNINA (CNN-based), or RF-Score based o
 - Use GNINA + RF-Score for validation of promising hits (binding energy <= -5.0 kcal/mol)
 You always prepare structures properly before docking and validate results for scientific accuracy.""",
         tools=[run_docking, batch_docking, calculate_properties],
-        llm=llm,
+        llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
         max_iter=25,
@@ -44,7 +73,7 @@ You use RDKit for SMILES parsing, 3D structure generation, format conversion, an
 You always verify drug-likeness using Lipinski's Rule of 5 and other filters.
 You provide detailed molecular property analysis including MW, LogP, TPSA, HBD, HBA, and rotatable bonds.""",
         tools=[calculate_properties, smiles_to_3d, convert_format, optimize_molecule],
-        llm=llm,
+        llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
         max_iter=20,
@@ -65,7 +94,7 @@ aromatic rings, and charged groups. You can generate pharmacophore models from:
 3. Known binding site residues (knowledge-based)
 You efficiently screen compound libraries against pharmacophore models to find novel hits.""",
         tools=[generate_pharmacophore, screen_library, fetch_protein],
-        llm=llm,
+        llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
         max_iter=25,
@@ -87,7 +116,7 @@ You predict key ADMET properties:
 - **Toxicity**: AMES mutagenicity, hERG inhibition, hepatotoxicity
 You always cross-reference predictions with Lipinski, Veber, and Egan rules.""",
         tools=[predict_admet, filter_admet, calculate_properties],
-        llm=llm,
+        llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
         max_iter=20,
@@ -110,7 +139,7 @@ You analyze protein-ligand interactions including:
 You use consensus scoring combining Vina, GNINA, RF-Score, and MD stability for robust ranking.
 You always provide actionable insights and next-step recommendations.""",
         tools=[analyze_interactions, rank_ligands, consensus_score, export_top_hits],
-        llm=llm,
+        llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
         max_iter=25,
@@ -131,7 +160,7 @@ You calculate molecular descriptors (2D, 3D, fingerprints) and build predictive 
 - Model interpretability and applicability domain
 You always validate models rigorously and provide confidence intervals for predictions.""",
         tools=[calculate_properties, predict_admet],
-        llm=llm,
+        llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
         max_iter=30,
@@ -153,7 +182,7 @@ You understand the complete drug discovery pipeline:
 You delegate tasks to the right specialists and synthesize their findings into comprehensive reports.
 You always consider both binding affinity AND drug-likeness when making recommendations.""",
         tools=[send_notification, export_top_hits, rank_ligands],
-        llm=llm,
+        llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
         max_iter=30,

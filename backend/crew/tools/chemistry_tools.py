@@ -122,8 +122,8 @@ def optimize_molecule(input: OptimizeInput) -> str:
     try:
         with httpx.Client(timeout=60.0) as client:
             response = client.post(
-                f"{BACKEND_URL}/api/chem/properties",
-                json={"smiles": input.smiles, "content": input.content}
+                f"{BACKEND_URL}/api/chem/to-3d",
+                json={"smiles": input.smiles}
             )
             return response.text
     except Exception as e:
