@@ -71,7 +71,7 @@ export async function startConsensusDocking(
 }
 
 export async function cancelDocking(jobId: string): Promise<{ job_id: string; status: string }> {
-  const { data } = await apiClient.post(`/docking/${jobId}/cancel`)
+  const { data } = await apiClient.post(`/dock/${jobId}/cancel`)
   return data
 }
 

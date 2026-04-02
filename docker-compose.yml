@@ -425,6 +425,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=INFO
+      - REDIS_URL=redis://redis:6379
     depends_on:
       redis:
         condition: service_healthy
@@ -533,6 +534,12 @@ services:
       postgres:
         condition: service_healthy
       docking-service:
+        condition: service_healthy
+      pharmacophore-service:
+        condition: service_healthy
+      md-service:
+        condition: service_healthy
+      analysis-service:
         condition: service_healthy
     deploy:
       resources:
