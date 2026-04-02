@@ -4292,6 +4292,81 @@ def ai_kg_add_experiment(request: Dict[str, Any]):
     return {"status": "recorded"}
 
 
+# ============================================================
+# Classroom Assignment System
+# ============================================================
+
+class AssignmentCreateRequest(BaseModel):
+    instructor_id: str
+    title: str
+    description: str
+    task_type: str = "docking"
+    config: Optional[Dict[str, Any]] = None
+    max_attempts: int = 3
+    expires_in_hours: int = 168
+    rubric: Optional[Dict[str, Any]] = None
+
+
+@app.post("/classroom/assignment/create")
+def classroom_create_assignment(request: AssignmentCreateRequest):
+    """Create a new classroom assignment with 6-char code."""
+    from classroom import create_assignment
+    result = create_assignment(
+        instructor_id=request.instructor_id,
+        title=request.title,
+        description=request.description,
+        task_type=request.task_type,
+        config=request.config,
+        max_attempts=request.max_attempts,
+        expires_in_hours=request.expires_in_hours,
+        rubric=request.rubric,
+    )
+    return result
+
+
+class AssignmentJoinRequest(BaseModel):
+    student_id: str
+    code: str
+
+
+@app.post("/classroom/assignment/join")
+def classroom_join_assignment(request: AssignmentJoinRequest):
+    """Join an assignment using the 6-character code."""
+    from classroom import join_assignment
+    return join_assignment(request.student_id, request.code)
+
+
+class AssignmentSubmitRequest(BaseModel):
+    code: str
+    student_id: str
+    result: Dict[str, Any]
+
+
+@app.post("/classroom/assignment/submit")
+def classroom_submit_assignment(request: AssignmentSubmitRequest):
+    """Submit an assignment result for auto-grading."""
+    from classroom import submit_assignment
+    return submit_assignment(request.code, request.student_id, request.result)
+
+
+@app.get("/classroom/instructor/{instructor_id}")
+def classroom_instructor_dashboard(instructor_id: str):
+    """Get instructor dashboard with assignments and student progress."""
+    from classroom import get_instructor_dashboard
+    return get_instructor_dashboard(instructor_id)
+
+
+@app.get("/classroom/rubrics")
+def classroom_list_rubrics():
+    """List available rubric templates."""
+    from classroom import _default_rubric
+    return {
+        "docking": _default_rubric("docking"),
+        "qsar": _default_rubric("qsar"),
+        "chemdraw": _default_rubric("chemdraw"),
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
 
