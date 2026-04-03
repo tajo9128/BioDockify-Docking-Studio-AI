@@ -663,7 +663,7 @@ export function LigandDesigner() {
           <div className="absolute inset-0">
             <Editor
               staticResourcesUrl=""
-              structServiceProvider={structServiceProvider}
+              structServiceProvider={structServiceProvider as any}
               onInit={handleKetcherInit}
               errorHandler={(err: string) => { setEditorError(err); setKetcherReady(false) }}
               buttons={{}}
