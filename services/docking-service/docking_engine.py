@@ -148,7 +148,7 @@ def run_vina_docking(
         logger.info("Initializing Vina...")
         v = Vina(sf_name="vina")
 
-        v.set_receptor(rigid_pdbqt_filename=receptor_file)
+        v.set_receptor(receptor_file)
         v.set_ligand_from_file(ligand_file)
         v.compute_vina_maps(
             center=[center_x, center_y, center_z], box_size=[size_x, size_y, size_z]
