@@ -915,7 +915,7 @@ END`
               <span className="text-sm">🧬 GNINA PDBQT</span>
             </a>
           )}
-          {!selectedJob?.download_urls || Object.keys(selectedJob.download_urls).length === 0 && (
+          {(!selectedJob?.download_urls || Object.keys(selectedJob.download_urls).length === 0) && (
             <div className="col-span-2 text-center text-gray-500 py-2">No files available</div>
           )}
         </div>

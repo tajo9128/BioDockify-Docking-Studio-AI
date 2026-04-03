@@ -57,16 +57,27 @@ export function Results() {
   }, [])
 
   useEffect(() => {
-    if (!viewer3dRef.current || !window.$3Dmol || viewerRef.current) return
+    if (!viewer3dRef.current || viewerRef.current) return
 
-    const viewer = window.$3Dmol.createViewer(viewer3dRef.current, {
-      backgroundColor: '#1a1a2e',
-    })
-    viewerRef.current = viewer
-    viewer.addModel('', 'pdb')
-    viewer.zoomTo()
-    viewer.render()
-  }, [])
+    const initViewer = () => {
+      if (!(window as any).$3Dmol || !viewer3dRef.current) return false
+      const viewer = (window as any).$3Dmol.createViewer(viewer3dRef.current, {
+        backgroundColor: '#1a1a2e',
+      })
+      viewerRef.current = viewer
+      viewer.addModel('', 'pdb')
+      viewer.zoomTo()
+      viewer.render()
+      return true
+    }
+
+    if (!initViewer()) {
+      const interval = setInterval(() => {
+        if (initViewer()) clearInterval(interval)
+      }, 200)
+      return () => clearInterval(interval)
+    }
+  }, [selectedJob])
 
   useEffect(() => {
     if (!selectedPose || !viewerRef.current) return

@@ -42,9 +42,23 @@ def init_db():
             rf_score REAL,
             consensus REAL,
             pdb_data TEXT,
+            hydrophobic_term REAL,
+            rotatable_penalty REAL,
+            lipo_contact REAL,
+            final_score REAL,
+            composite_score REAL,
+            constraint_penalty REAL,
             FOREIGN KEY (job_uuid) REFERENCES jobs(job_uuid)
         )
     """)
+
+    # Migrate existing DBs: add composite scoring columns if missing
+    for col in ['hydrophobic_term', 'rotatable_penalty', 'lipo_contact',
+                'final_score', 'composite_score', 'constraint_penalty']:
+        try:
+            cur.execute(f"ALTER TABLE docking_results ADD COLUMN {col} REAL")
+        except Exception:
+            pass  # column already exists
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS interactions (
@@ -118,10 +132,16 @@ def update_job_status(job_uuid: str, status: str, binding_energy: Optional[float
 
 def add_docking_result(job_uuid: str, pose_id: int, ligand_name: str, 
                       vina_score: Optional[float] = None, gnina_score: Optional[float] = None,
-                      rf_score: Optional[float] = None, pdb_data: Optional[str] = None) -> bool:
+                      rf_score: Optional[float] = None, pdb_data: Optional[str] = None,
+                      hydrophobic_term: Optional[float] = None,
+                      rotatable_penalty: Optional[float] = None,
+                      lipo_contact: Optional[float] = None,
+                      final_score: Optional[float] = None,
+                      composite_score: Optional[float] = None,
+                      constraint_penalty: Optional[float] = None) -> bool:
     """Add docking result for a pose"""
     try:
-        print(f"[DB] Saving result: job_uuid={job_uuid}, pose_id={pose_id}, vina={vina_score}")
+        print(f"[DB] Saving result: job_uuid={job_uuid}, pose_id={pose_id}, vina={vina_score}, composite={composite_score}")
         conn = sqlite3.connect(DB_PATH)
         cur = conn.cursor()
         
@@ -131,9 +151,14 @@ def add_docking_result(job_uuid: str, pose_id: int, ligand_name: str,
             consensus = sum(scores) / len(scores)
         
         cur.execute("""
-            INSERT INTO docking_results (job_uuid, pose_id, ligand_name, vina_score, gnina_score, rf_score, consensus, pdb_data)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (job_uuid, pose_id, ligand_name, vina_score, gnina_score, rf_score, consensus, pdb_data))
+            INSERT INTO docking_results (
+                job_uuid, pose_id, ligand_name, vina_score, gnina_score, rf_score,
+                consensus, pdb_data, hydrophobic_term, rotatable_penalty,
+                lipo_contact, final_score, composite_score, constraint_penalty
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (job_uuid, pose_id, ligand_name, vina_score, gnina_score, rf_score,
+              consensus, pdb_data, hydrophobic_term, rotatable_penalty,
+              lipo_contact, final_score, composite_score, constraint_penalty))
         
         conn.commit()
         conn.close()
@@ -209,7 +234,8 @@ def get_docking_results(job_uuid: str) -> List[Dict[str, Any]]:
         conn.close()
         
         columns = ['id', 'job_uuid', 'pose_id', 'ligand_name', 'vina_score', 'gnina_score', 
-                  'rf_score', 'consensus', 'pdb_data']
+                  'rf_score', 'consensus', 'pdb_data', 'hydrophobic_term', 'rotatable_penalty',
+                  'lipo_contact', 'final_score', 'composite_score', 'constraint_penalty']
         return [dict(zip(columns, row)) for row in rows]
     except Exception as e:
         print(f"Error getting results: {e}")

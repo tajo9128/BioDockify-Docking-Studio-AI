@@ -734,10 +734,19 @@ def add_result(
     gnina_score: Optional[float] = None,
     rf_score: Optional[float] = None,
     pdb_data: Optional[str] = None,
+    hydrophobic_term: Optional[float] = None,
+    rotatable_penalty: Optional[float] = None,
+    lipo_contact: Optional[float] = None,
+    final_score: Optional[float] = None,
+    composite_score: Optional[float] = None,
+    constraint_penalty: Optional[float] = None,
 ):
     """Add docking result for a pose"""
     success = add_docking_result(
-        job_uuid, pose_id, ligand_name, vina_score, gnina_score, rf_score, pdb_data
+        job_uuid, pose_id, ligand_name, vina_score, gnina_score, rf_score, pdb_data,
+        hydrophobic_term=hydrophobic_term, rotatable_penalty=rotatable_penalty,
+        lipo_contact=lipo_contact, final_score=final_score,
+        composite_score=composite_score, constraint_penalty=constraint_penalty,
     )
     if success:
         return {"status": "added"}
@@ -1082,6 +1091,12 @@ def api_docking_run(req: DockingRunRequest):
                     gnina_score=r.get("gnina_score"),
                     rf_score=r.get("rf_score"),
                     pdb_data=pdb_data if pdb_data else None,
+                    hydrophobic_term=r.get("hydrophobic_term"),
+                    rotatable_penalty=r.get("rotatable_penalty"),
+                    lipo_contact=r.get("lipo_contact"),
+                    final_score=r.get("final_score"),
+                    composite_score=r.get("composite_score"),
+                    constraint_penalty=r.get("constraint_penalty"),
                 )
                 if success:
                     saved_count += 1
