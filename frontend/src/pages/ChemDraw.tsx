@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui'
 
 const FDA_DRUGS = [
@@ -67,13 +68,37 @@ const LINKERS = [
   { name: 'Carbamate', smiles: 'COC(=O)N' },
 ]
 
+const KINASE_SCAFFOLDS = [
+  { name: 'Imatinib core', smiles: 'Cc1ccc(cc1Nc2nccc(n2)c3cccnc3)NC(=O)c4ccc(cc4)CN5CCN(CC5)C' },
+  { name: 'Erlotinib core', smiles: 'COCCOc1cc2ncnc(Nc3cccc(c3)C#C)c2cc1OCCOC' },
+  { name: 'Gefitinib core', smiles: 'COc1cc2c(cc1OCCCN3CCOCC3)ncnc2Nc4ccc(F)c(Cl)c4' },
+  { name: 'Pyrimidine-amine', smiles: 'Nc1ccnc(n1)Nc2ccccc2' },
+  { name: 'Indazole', smiles: 'c1ccc2[nH]ncc2c1' },
+  { name: 'Aminopyrazole', smiles: 'Nc1cc(nn1)c2ccccc2' },
+  { name: 'Benzimidazole', smiles: 'c1ccc2nc[nH]c2c1' },
+  { name: 'Quinazoline', smiles: 'c1cnc2ccccc2n1' },
+]
+
+const NATURAL_PRODUCTS = [
+  { name: 'Quercetin', smiles: 'O=c1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12' },
+  { name: 'Resveratrol', smiles: 'Oc1ccc(cc1)/C=C/c2cc(O)cc(O)c2' },
+  { name: 'Curcumin', smiles: 'COc1cc(/C=C/C(=O)CC(=O)/C=C/c2ccc(O)c(OC)c2)ccc1O' },
+  { name: 'Berberine', smiles: 'COc1ccc2c(c1OC)C=C3c4cc5c(cc4[N+](=CC3=2)C)OCO5' },
+  { name: 'Epigallocatechin', smiles: 'Oc1cc(O)c2c(c1)O[C@@H](c1cc(O)c(O)c(O)c1)[C@H](O)C2' },
+  { name: 'Taxol core', smiles: 'OC1C(=O)c2ccccc2C(=O)O1' },
+  { name: 'Camptothecin', smiles: 'OC1(CC2=C(CN3C4=CC5=CC=CC=C5N=C4C=C3)C(=O)OC12)CC' },
+]
+
 const MUTATION_STRATEGIES = [
-  { key: 'add_halogen', label: 'Add Halogen (F, Cl, Br)', icon: '+' },
-  { key: 'add_oh', label: 'Add OH Group', icon: '+' },
-  { key: 'add_nh2', label: 'Add NH2 Group', icon: '+' },
-  { key: 'add_aromatic', label: 'Add Aromatic Ring', icon: '+' },
-  { key: 'bioisostere', label: 'Bioisosteric Replace', icon: '~' },
-  { key: 'reduce_flex', label: 'Reduce Flexibility', icon: '-' },
+  { key: 'add_halogen', label: 'Add Halogen (F, Cl, Br)', icon: '⊕' },
+  { key: 'add_oh', label: 'Add OH Group', icon: '⊕' },
+  { key: 'add_nh2', label: 'Add NH₂ Group', icon: '⊕' },
+  { key: 'add_cf3', label: 'Add CF₃ Group', icon: '⊕' },
+  { key: 'add_aromatic', label: 'Add Phenyl Ring', icon: '⊕' },
+  { key: 'bioisostere', label: 'Bioisosteric Replace', icon: '⇌' },
+  { key: 'carboxyl_to_tetrazole', label: 'COOH → Tetrazole', icon: '⇌' },
+  { key: 'reduce_flex', label: 'Reduce Flexibility', icon: '⊖' },
+  { key: 'n_methylate', label: 'N-Methylation', icon: '⊕' },
 ]
 
 interface Properties {
@@ -92,9 +117,23 @@ interface Suggestion {
   type: 'good' | 'warning' | 'error' | 'info'
 }
 
+const MAX_HISTORY = 30
+const RECENT_KEY = 'chemdraw_recent'
+
 export function ChemDraw() {
+  const navigate = useNavigate()
   const [smiles, setSmiles] = useState('CC(=O)Oc1ccccc1C(=O)O')
   const [molName, setMolName] = useState('Aspirin')
+  const smilesHistoryRef = useRef<string[]>(['CC(=O)Oc1ccccc1C(=O)O'])
+  const historyIdxRef = useRef(0)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const [pubchemQuery, setPubchemQuery] = useState('')
+  const [pubchemLoading, setPubchemLoading] = useState(false)
+  const [pubchemError, setPubchemError] = useState('')
+  const [recentMolecules, setRecentMolecules] = useState<Array<{name: string; smiles: string}>>(() => {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] }
+  })
   const [properties, setProperties] = useState<Properties>({
     mw: 180.16, logp: 1.19, hbd: 1, hba: 3, tpsa: 63.60,
     rotatable: 4, formula: 'C9H8O4', valid: true
@@ -115,9 +154,86 @@ export function ChemDraw() {
   const [showTemplates, setShowTemplates] = useState(false)
   const [templateFilter, setTemplateFilter] = useState('')
   const [showExport, setShowExport] = useState(false)
+  const [showKinase, setShowKinase] = useState(false)
+  const [showNatural, setShowNatural] = useState(false)
   const [dockingPrep, setDockingPrep] = useState<any>(null)
   const canvas2dRef = useRef<HTMLCanvasElement>(null)
   const viewer3dRef = useRef<HTMLDivElement>(null)
+
+  const pushHistory = useCallback((newSmiles: string) => {
+    const hist = smilesHistoryRef.current
+    const idx = historyIdxRef.current
+    const trimmed = hist.slice(0, idx + 1)
+    trimmed.push(newSmiles)
+    if (trimmed.length > MAX_HISTORY) trimmed.shift()
+    smilesHistoryRef.current = trimmed
+    historyIdxRef.current = trimmed.length - 1
+    setCanUndo(historyIdxRef.current > 0)
+    setCanRedo(false)
+  }, [])
+
+  const undoSmiles = () => {
+    if (historyIdxRef.current <= 0) return
+    historyIdxRef.current -= 1
+    const prev = smilesHistoryRef.current[historyIdxRef.current]
+    setSmiles(prev)
+    setCanUndo(historyIdxRef.current > 0)
+    setCanRedo(true)
+  }
+
+  const redoSmiles = () => {
+    if (historyIdxRef.current >= smilesHistoryRef.current.length - 1) return
+    historyIdxRef.current += 1
+    const next = smilesHistoryRef.current[historyIdxRef.current]
+    setSmiles(next)
+    setCanUndo(true)
+    setCanRedo(historyIdxRef.current < smilesHistoryRef.current.length - 1)
+  }
+
+  const saveToRecent = useCallback((name: string, smi: string) => {
+    if (!smi) return
+    const updated = [{ name, smiles: smi }, ...recentMolecules.filter(m => m.smiles !== smi)].slice(0, 8)
+    setRecentMolecules(updated)
+    localStorage.setItem(RECENT_KEY, JSON.stringify(updated))
+  }, [recentMolecules])
+
+  const searchPubChem = async () => {
+    if (!pubchemQuery.trim()) return
+    setPubchemLoading(true)
+    setPubchemError('')
+    try {
+      const res = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(pubchemQuery.trim())}/property/IsomericSMILES,MolecularFormula,MolecularWeight,IUPACName/JSON`)
+      if (!res.ok) throw new Error('Not found')
+      const data = await res.json()
+      const props = data?.PropertyTable?.Properties?.[0]
+      if (props?.IsomericSMILES) {
+        const name = pubchemQuery.trim()
+        setSmiles(props.IsomericSMILES)
+        setMolName(name)
+        pushHistory(props.IsomericSMILES)
+        if (props.IUPACName) setIupacName(props.IUPACName)
+        saveToRecent(name, props.IsomericSMILES)
+        setSuggestions([{ text: `✓ Loaded from PubChem: MW=${parseFloat(props.MolecularWeight || '0').toFixed(1)} Da, Formula=${props.MolecularFormula}`, type: 'good' }])
+      } else {
+        setPubchemError('Compound not found in PubChem')
+      }
+    } catch (e: any) {
+      setPubchemError(`PubChem: ${e.message || 'Not found'}`)
+    }
+    setPubchemLoading(false)
+  }
+
+  const sendToQSAR = () => {
+    if (!smiles) return
+    sessionStorage.setItem('qsar_smiles', smiles)
+    navigate('/qsar')
+  }
+
+  const sendToADMET = () => {
+    if (!smiles) return
+    sessionStorage.setItem('admet_smiles', smiles)
+    navigate('/admet')
+  }
 
   useEffect(() => {
     if (activeTab === '2d' && smiles) {
@@ -226,6 +342,11 @@ export function ChemDraw() {
       script.onload = () => resolve()
       document.body.appendChild(script)
     })
+  }
+
+  const handleSmilesChange = (val: string) => {
+    setSmiles(val)
+    pushHistory(val)
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, fileType: string) => {
@@ -428,6 +549,7 @@ export function ChemDraw() {
 
   const mutateMolecule = (strategy: string) => {
     let newSmiles = smiles
+    const prevSmiles = smiles
     switch (strategy) {
       case 'add_halogen':
         newSmiles = smiles.replace(/([Cc])\)$/, '$1F)')
@@ -441,17 +563,30 @@ export function ChemDraw() {
         newSmiles = smiles.replace(/([Cc])\)$/, '$1N)')
         if (newSmiles === smiles) newSmiles = smiles + 'N'
         break
+      case 'add_cf3':
+        newSmiles = smiles + 'C(F)(F)F'
+        break
       case 'add_aromatic':
         newSmiles = smiles + 'c1ccccc1'
         break
       case 'bioisostere':
-        newSmiles = smiles.replace(/CO/, 'CF').replace(/NH2/, 'OH')
+        newSmiles = smiles.replace(/C\(=O\)O/, 'S(=O)(=O)O')
+        if (newSmiles === smiles) newSmiles = smiles.replace(/CO/, 'CF').replace(/NH2/, 'OH')
         if (newSmiles === smiles) newSmiles = smiles.replace(/C=O/, 'C=S')
+        break
+      case 'carboxyl_to_tetrazole':
+        newSmiles = smiles.replace(/C\(=O\)O/, 'c1nnn[nH]1')
+        if (newSmiles === smiles) newSmiles = smiles + 'c1nnn[nH]1'
         break
       case 'reduce_flex':
         newSmiles = smiles.replace(/\([A-Za-z0-9]+\)/g, '')
         break
+      case 'n_methylate':
+        newSmiles = smiles.replace(/\[NH\]/, 'N(C)').replace(/\[nH\]/, 'n(C)')
+        if (newSmiles === smiles) newSmiles = smiles.replace(/N/, 'N(C)')
+        break
     }
+    if (newSmiles !== prevSmiles) pushHistory(newSmiles)
     setSmiles(newSmiles)
   }
 
@@ -581,6 +716,10 @@ export function ChemDraw() {
         <span className="text-xs text-gray-400">Design, analyze & dock molecules</span>
         <div className="flex-1" />
         <span className="text-xs text-gray-500">Q: Cleanup | A: Analyze</span>
+        <button onClick={undoSmiles} disabled={!canUndo} title="Undo (Ctrl+Z)"
+          className="px-2 py-1 text-xs rounded border border-slate-600 text-gray-300 hover:bg-slate-700 disabled:opacity-30">↩ Undo</button>
+        <button onClick={redoSmiles} disabled={!canRedo} title="Redo (Ctrl+Y)"
+          className="px-2 py-1 text-xs rounded border border-slate-600 text-gray-300 hover:bg-slate-700 disabled:opacity-30">↪ Redo</button>
         <Button variant="outline" size="sm" onClick={cleanupStructure}>Cleanup</Button>
         <Button variant="outline" size="sm" onClick={clearEditor}>Clear</Button>
         <Button variant="outline" size="sm" onClick={copySmiles}>Copy SMILES</Button>
@@ -610,6 +749,10 @@ export function ChemDraw() {
         </Button>
         <Button variant="primary" size="sm" onClick={dockMolecule}>Dock</Button>
         <Button variant="secondary" size="sm" onClick={optimizeMolecule}>AI Optimize</Button>
+        <button onClick={sendToQSAR} title="Send to QSAR Modeling"
+          className="px-2 py-1 text-xs rounded bg-purple-700 hover:bg-purple-600 text-white">→ QSAR</button>
+        <button onClick={sendToADMET} title="Send to ADMET Prediction"
+          className="px-2 py-1 text-xs rounded bg-green-700 hover:bg-green-600 text-white">→ ADMET</button>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
@@ -641,17 +784,53 @@ export function ChemDraw() {
           </div>
 
           <div className="p-3 border-b border-gray-200">
+            <div className="text-xs font-semibold text-gray-700 mb-2">🔍 PubChem Search</div>
+            <div className="flex gap-1">
+              <input
+                type="text"
+                value={pubchemQuery}
+                onChange={e => setPubchemQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchPubChem()}
+                placeholder="Drug name (e.g. Aspirin)"
+                className="flex-1 px-2 py-1 text-xs border border-gray-300 rounded bg-gray-50 focus:ring-1 focus:ring-cyan-400"
+              />
+              <button onClick={searchPubChem} disabled={pubchemLoading}
+                className="px-2 py-1 text-xs bg-cyan-600 hover:bg-cyan-700 text-white rounded disabled:opacity-50">
+                {pubchemLoading ? '…' : 'Go'}
+              </button>
+            </div>
+            {pubchemError && <p className="text-xs text-red-500 mt-1">{pubchemError}</p>}
+          </div>
+
+          {recentMolecules.length > 0 && (
+            <div className="p-3 border-b border-gray-200">
+              <div className="text-xs font-semibold text-gray-700 mb-2">🕐 Recent Molecules</div>
+              <div className="space-y-1">
+                {recentMolecules.map((m, i) => (
+                  <button key={i} onClick={() => { setSmiles(m.smiles); setMolName(m.name); pushHistory(m.smiles) }}
+                    className="w-full text-left text-xs px-2 py-1 bg-gray-50 hover:bg-cyan-50 border border-gray-200 rounded truncate transition-colors">
+                    {m.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="p-3 border-b border-gray-200">
             <label className="text-xs font-medium text-gray-600 mb-1 block">SMILES Input</label>
             <textarea
               value={smiles}
-              onChange={e => setSmiles(e.target.value)}
+              onChange={e => handleSmilesChange(e.target.value)}
               className="w-full px-3 py-2 text-xs font-mono border border-gray-300 rounded-lg resize-none bg-gray-50 focus:ring-2 focus:ring-cyan-400 focus:border-cyan-400"
               rows={3}
               placeholder="Enter SMILES..."
             />
-            <Button variant="primary" size="sm" className="w-full mt-2" onClick={analyzeMolecule} disabled={loading}>
-              Analyze Structure
-            </Button>
+            <div className="flex gap-2 mt-2">
+              <Button variant="primary" size="sm" className="flex-1" onClick={() => { analyzeMolecule(); saveToRecent(molName, smiles) }} disabled={loading}>
+                Analyze
+              </Button>
+              <button onClick={cleanupStructure} className="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded">✦ Clean</button>
+            </div>
           </div>
 
           <div className="p-3 border-b border-gray-200">
@@ -702,59 +881,103 @@ export function ChemDraw() {
                 <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
                   {filteredLinkers.map(t => (
                     <button key={t.name}
-                      onClick={() => { loadExample(t.name, t.smiles); setMolName(t.name); }}
+                      onClick={() => { loadExample(t.name, t.smiles); setMolName(t.name); pushHistory(t.smiles) }}
                       className="text-xs px-2 py-1.5 bg-gray-50 hover:bg-amber-50 hover:text-amber-700 border border-gray-200 rounded text-left transition-colors"
                       title={t.smiles}>
                       {t.name}
                     </button>
                   ))}
                 </div>
+                <button onClick={() => setShowKinase(!showKinase)}
+                  className="w-full text-left text-xs font-medium text-gray-500 mt-2 mb-1 flex justify-between">
+                  <span>Kinase Scaffolds</span><span>{showKinase ? '▲' : '▼'}</span>
+                </button>
+                {showKinase && (
+                  <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto mb-2">
+                    {KINASE_SCAFFOLDS.map(t => (
+                      <button key={t.name}
+                        onClick={() => { loadExample(t.name, t.smiles); setMolName(t.name); pushHistory(t.smiles) }}
+                        className="text-xs px-2 py-1.5 bg-gray-50 hover:bg-rose-50 hover:text-rose-700 border border-gray-200 rounded text-left transition-colors"
+                        title={t.smiles}>
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <button onClick={() => setShowNatural(!showNatural)}
+                  className="w-full text-left text-xs font-medium text-gray-500 mb-1 flex justify-between">
+                  <span>Natural Products</span><span>{showNatural ? '▲' : '▼'}</span>
+                </button>
+                {showNatural && (
+                  <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
+                    {NATURAL_PRODUCTS.map(t => (
+                      <button key={t.name}
+                        onClick={() => { loadExample(t.name, t.smiles); setMolName(t.name); pushHistory(t.smiles) }}
+                        className="text-xs px-2 py-1.5 bg-gray-50 hover:bg-emerald-50 hover:text-emerald-700 border border-gray-200 rounded text-left transition-colors"
+                        title={t.smiles}>
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
           <div className="p-3 border-b border-gray-200">
-            <div className="text-xs font-semibold text-gray-700 mb-2">Properties (Lipinski)</div>
-            <div className="space-y-0.5">
-              <div className="flex justify-between text-xs py-1 px-2 bg-gray-50 rounded">
-                <span className="text-gray-600">MW</span>
-                <span className="font-mono font-medium">{properties.mw?.toFixed(2) ?? '-'} Da</span>
-              </div>
-              <div className="flex justify-between text-xs py-1 px-2 bg-gray-50 rounded">
-                <span className="text-gray-600">LogP</span>
-                <span className="font-mono font-medium">{properties.logp?.toFixed(2) ?? '-'}</span>
-              </div>
-              <div className="flex justify-between text-xs py-1 px-2 bg-gray-50 rounded">
-                <span className="text-gray-600">HBD</span>
-                <span className="font-mono font-medium">{properties.hbd ?? '-'}</span>
-              </div>
-              <div className="flex justify-between text-xs py-1 px-2 bg-gray-50 rounded">
-                <span className="text-gray-600">HBA</span>
-                <span className="font-mono font-medium">{properties.hba ?? '-'}</span>
-              </div>
-              <div className="flex justify-between text-xs py-1 px-2 bg-gray-50 rounded">
-                <span className="text-gray-600">TPSA</span>
-                <span className="font-mono font-medium">{properties.tpsa?.toFixed(1) ?? '-'} Å²</span>
-              </div>
-              <div className="flex justify-between text-xs py-1 px-2 bg-gray-50 rounded">
-                <span className="text-gray-600">Rotatable</span>
-                <span className="font-mono font-medium">{properties.rotatable ?? '-'}</span>
-              </div>
+            <div className="text-xs font-semibold text-gray-700 mb-2">Molecular Properties</div>
+            <div className="space-y-1">
+              {([
+                { label: 'MW', value: properties.mw?.toFixed(1), unit: 'Da', min: 0, max: 700, good: [0,500], warn: [500,600] },
+                { label: 'LogP', value: properties.logp?.toFixed(2), unit: '', min: -4, max: 10, good: [-0.4,5], warn: [5,7] },
+                { label: 'HBD', value: String(properties.hbd ?? '-'), unit: '', min: 0, max: 12, good: [0,5], warn: [5,8] },
+                { label: 'HBA', value: String(properties.hba ?? '-'), unit: '', min: 0, max: 20, good: [0,10], warn: [10,14] },
+                { label: 'TPSA', value: properties.tpsa?.toFixed(1), unit: 'Ų', min: 0, max: 250, good: [0,90], warn: [90,140] },
+                { label: 'Rot.Bonds', value: String(properties.rotatable ?? '-'), unit: '', min: 0, max: 20, good: [0,10], warn: [10,15] },
+              ] as any[]).map(p => {
+                const num = parseFloat(p.value)
+                const isGood = !isNaN(num) && num >= p.good[0] && num <= p.good[1]
+                const isWarn = !isNaN(num) && num > p.warn[0]
+                const color = isGood ? 'text-green-700' : isWarn ? 'text-amber-600' : 'text-red-600'
+                const bg = isGood ? 'bg-green-50' : isWarn ? 'bg-amber-50' : 'bg-red-50'
+                return (
+                  <div key={p.label} className={`flex justify-between text-xs py-1 px-2 rounded ${bg}`}>
+                    <span className="text-gray-600">{p.label}</span>
+                    <span className={`font-mono font-semibold ${color}`}>{p.value ?? '-'}{p.unit ? ` ${p.unit}` : ''}</span>
+                  </div>
+                )
+              })}
               <div className="flex justify-between text-xs py-1 px-2 bg-gray-50 rounded">
                 <span className="text-gray-600">Formula</span>
-                <span className="font-mono font-medium text-xs">{properties.formula ?? '-'}</span>
+                <span className="font-mono font-medium text-xs text-blue-700">{properties.formula ?? '-'}</span>
               </div>
             </div>
           </div>
 
           <div className="p-3 border-b border-gray-200">
-            <div className="text-xs font-semibold text-gray-700 mb-2">Drug-like Rules</div>
-            <div className="space-y-0.5">
-              <RuleCheck pass={(properties.mw ?? 0) < 500} label="MW < 500 Da" value={properties.mw?.toFixed(1)} />
-              <RuleCheck pass={(properties.logp ?? 0) < 5} label="LogP < 5" value={properties.logp?.toFixed(2)} />
-              <RuleCheck pass={(properties.hbd ?? 0) <= 5} label="HBD ≤ 5" value={String(properties.hbd)} />
-              <RuleCheck pass={(properties.hba ?? 0) <= 10} label="HBA ≤ 10" value={String(properties.hba)} />
-              <RuleCheck pass={(properties.rotatable ?? 0) <= 10} label="Rotatable ≤ 10" value={String(properties.rotatable)} />
+            <div className="text-xs font-semibold text-gray-700 mb-1">Drug-likeness Filters</div>
+            <div className="mb-1">
+              <p className="text-xs font-medium text-blue-600 mb-0.5">Lipinski Ro5</p>
+              <div className="space-y-0.5">
+                <RuleCheck pass={(properties.mw ?? 0) < 500} label="MW < 500 Da" value={properties.mw?.toFixed(1)} />
+                <RuleCheck pass={(properties.logp ?? 0) < 5} label="LogP < 5" value={properties.logp?.toFixed(2)} />
+                <RuleCheck pass={(properties.hbd ?? 0) <= 5} label="HBD ≤ 5" value={String(properties.hbd)} />
+                <RuleCheck pass={(properties.hba ?? 0) <= 10} label="HBA ≤ 10" value={String(properties.hba)} />
+              </div>
+            </div>
+            <div className="mb-1">
+              <p className="text-xs font-medium text-purple-600 mb-0.5">Veber (Oral Bioavail.)</p>
+              <div className="space-y-0.5">
+                <RuleCheck pass={(properties.tpsa ?? 999) <= 140} label="TPSA ≤ 140 Ų" value={properties.tpsa?.toFixed(1)} />
+                <RuleCheck pass={(properties.rotatable ?? 999) <= 10} label="Rot. Bonds ≤ 10" value={String(properties.rotatable)} />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-emerald-600 mb-0.5">Ghose Filter</p>
+              <div className="space-y-0.5">
+                <RuleCheck pass={(properties.mw ?? 0) >= 160 && (properties.mw ?? 0) <= 480} label="160 ≤ MW ≤ 480" value={properties.mw?.toFixed(1)} />
+                <RuleCheck pass={(properties.logp ?? -99) >= -0.4 && (properties.logp ?? 99) <= 5.6} label="-0.4 ≤ LogP ≤ 5.6" value={properties.logp?.toFixed(2)} />
+              </div>
             </div>
           </div>
 

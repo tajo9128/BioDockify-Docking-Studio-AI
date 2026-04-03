@@ -10,10 +10,16 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    exclude: ['ketcher-react', 'ketcher-standalone', 'ketcher-core'],
+  },
   build: {
     outDir: './dist',
     emptyOutDir: true,
     sourcemap: false,
+    rollupOptions: {
+      external: [],
+    },
   },
   server: {
     port: 5173,

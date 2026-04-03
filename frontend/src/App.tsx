@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { Dashboard } from '@/pages/Dashboard'
 import { Docking } from '@/pages/Docking'
-import { ChemDraw } from '@/pages/ChemDraw'
+import { LigandDesigner } from '@/pages/LigandDesigner'
 import { JobQueue } from '@/pages/JobQueue'
 import { Results } from '@/pages/Results'
 import { RMSDAnalysis } from '@/pages/RMSDAnalysis'
@@ -22,7 +22,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/chemdraw" element={<ChemDraw />} />
+          <Route path="/ligand-designer" element={<LigandDesigner />} />
           <Route path="/docking" element={<Docking />} />
           <Route path="/jobs" element={<JobQueue />} />
           <Route path="/results" element={<Results />} />

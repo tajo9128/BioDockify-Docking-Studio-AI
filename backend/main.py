@@ -5209,6 +5209,477 @@ def qsar_delete_model(model_id: str):
 
 
 # ============================================================
+# Ligand Designer API  (/api/chem/*)
+# ============================================================
+
+# ── In-memory cache keyed by canonical SMILES ────────────────
+_CHEM_CACHE: Dict[str, Any] = {}
+
+def _canonical(smiles: str) -> str:
+    try:
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(smiles)
+        return Chem.MolToSmiles(mol) if mol else smiles
+    except Exception:
+        return smiles
+
+
+class ChemSmilesRequest(BaseModel):
+    smiles: str
+
+
+@app.post("/api/chem/properties")
+def chem_properties(req: ChemSmilesRequest):
+    """Core molecular properties with drug-likeness (cached)."""
+    canon = _canonical(req.smiles)
+    cache_key = f"props_{canon}"
+    if cache_key in _CHEM_CACHE:
+        return _CHEM_CACHE[cache_key]
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors, rdMolDescriptors
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            return {"valid": False, "error": "Invalid SMILES"}
+        result = {
+            "valid": True,
+            "mw": round(Descriptors.MolWt(mol), 3),
+            "logp": round(Descriptors.MolLogP(mol), 3),
+            "hbd": rdMolDescriptors.CalcNumHBD(mol),
+            "hba": rdMolDescriptors.CalcNumHBA(mol),
+            "tpsa": round(Descriptors.TPSA(mol), 2),
+            "rotatable_bonds": rdMolDescriptors.CalcNumRotatableBonds(mol),
+            "rings": rdMolDescriptors.CalcNumRings(mol),
+            "aromatic_rings": rdMolDescriptors.CalcNumAromaticRings(mol),
+            "formula": rdMolDescriptors.CalcMolFormula(mol),
+            "heavy_atoms": mol.GetNumHeavyAtoms(),
+        }
+        _CHEM_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/alerts")
+def chem_alerts(req: ChemSmilesRequest):
+    """PAINS, reactive group, and Ames mutagenicity structural alerts (cached)."""
+    canon = _canonical(req.smiles)
+    cache_key = f"alerts_{canon}"
+    if cache_key in _CHEM_CACHE:
+        return _CHEM_CACHE[cache_key]
+    try:
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            return {"alerts": [], "error": "Invalid SMILES"}
+
+        ALERT_PATTERNS = [
+            ("Michael acceptor", "[CX3]=[CX3][CX3]=[OX1]", "reactive", "medium"),
+            ("Aldehyde", "[CX3H1](=O)", "reactive", "medium"),
+            ("Acyl halide", "[CX3](=[OX1])[F,Cl,Br,I]", "reactive", "high"),
+            ("Peroxide", "[OX2][OX2]", "reactive", "high"),
+            ("Epoxide", "[C1OC1]", "reactive", "medium"),
+            ("Isocyanate", "[N]=[C]=[O]", "reactive", "high"),
+            ("PAINS: rhodanine", "[S;X2][CH2][C;X3](=O)", "pains", "medium"),
+            ("PAINS: catechol", "c1cc(O)c(O)cc1", "pains", "medium"),
+            ("PAINS: quinone", "O=C1C=CC(=O)C=C1", "pains", "high"),
+            ("PAINS: nitroso", "[N;X2](=O)", "pains", "high"),
+            ("Ames: nitro-aromatic", "[a][N+](=O)[O-]", "ames", "high"),
+            ("Ames: N-nitroso", "[#7][N;X2]=O", "ames", "high"),
+            ("Ames: aromatic amine", "[NH2]a", "ames", "medium"),
+            ("Ames: alkyl halide", "[CX4][F,Cl,Br,I]", "ames", "low"),
+            ("Ames: polycyclic aromatic", "c1ccc2cccc3cccc1c23", "ames", "high"),
+        ]
+
+        found = []
+        for name, smarts, alert_type, severity in ALERT_PATTERNS:
+            try:
+                patt = Chem.MolFromSmarts(smarts)
+                if patt and mol.HasSubstructMatch(patt):
+                    found.append({"name": name, "type": alert_type, "severity": severity, "smarts": smarts})
+            except Exception:
+                continue
+
+        result = {"alerts": found}
+        _CHEM_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/functional-groups")
+def chem_functional_groups(req: ChemSmilesRequest):
+    """Detect common functional groups via SMARTS (cached)."""
+    canon = _canonical(req.smiles)
+    cache_key = f"fgroups_{canon}"
+    if cache_key in _CHEM_CACHE:
+        return _CHEM_CACHE[cache_key]
+    try:
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            return {"groups": []}
+
+        GROUP_PATTERNS = [
+            ("Carboxylic acid", "[CX3](=O)[OX2H1]", "bg-red-100 text-red-700"),
+            ("Ester", "[CX3](=O)[OX2][CX4]", "bg-orange-100 text-orange-700"),
+            ("Amide", "[CX3](=O)[NX3]", "bg-yellow-100 text-yellow-700"),
+            ("Amine (primary)", "[NX3;H2][CX4]", "bg-blue-100 text-blue-700"),
+            ("Amine (secondary)", "[NX3;H1]([CX4])[CX4]", "bg-blue-200 text-blue-800"),
+            ("Amine (tertiary)", "[NX3]([CX4])([CX4])[CX4]", "bg-indigo-100 text-indigo-700"),
+            ("Alcohol", "[OX2H][CX4]", "bg-green-100 text-green-700"),
+            ("Phenol", "[OX2H]c", "bg-teal-100 text-teal-700"),
+            ("Aldehyde", "[CX3H1](=O)", "bg-amber-100 text-amber-700"),
+            ("Ketone", "[CX3](=O)[CX4]", "bg-amber-200 text-amber-800"),
+            ("Sulfonamide", "S(=O)(=O)[NX3]", "bg-purple-100 text-purple-700"),
+            ("Sulfone", "[SX4](=O)(=O)", "bg-purple-200 text-purple-800"),
+            ("Nitro", "[N+](=O)[O-]", "bg-rose-100 text-rose-700"),
+            ("Halide (F)", "[F]", "bg-cyan-100 text-cyan-700"),
+            ("Halide (Cl)", "[Cl]", "bg-cyan-200 text-cyan-800"),
+            ("Halide (Br)", "[Br]", "bg-cyan-300 text-cyan-900"),
+            ("Nitrile", "[CX2]#[NX1]", "bg-lime-100 text-lime-700"),
+            ("Urea", "[NX3]C(=O)[NX3]", "bg-stone-100 text-stone-700"),
+            ("Carbamate", "[NX3]C(=O)[OX2]", "bg-stone-200 text-stone-800"),
+            ("Aromatic ring", "c1ccccc1", "bg-sky-100 text-sky-700"),
+        ]
+
+        found = []
+        for name, smarts, color in GROUP_PATTERNS:
+            try:
+                patt = Chem.MolFromSmarts(smarts)
+                if patt:
+                    matches = mol.GetSubstructMatches(patt)
+                    if matches:
+                        found.append({"name": name, "count": len(matches), "color": color})
+            except Exception:
+                continue
+
+        result = {"groups": found}
+        _CHEM_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/sa-score")
+def chem_sa_score(req: ChemSmilesRequest):
+    """Synthetic Accessibility Score (SA Score, 1=easy, 10=hard)."""
+    try:
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+        try:
+            from rdkit.Chem import RDConfig
+            import sys as _sys
+            sa_path = os.path.join(RDConfig.RDContribDir, "SA_Score")
+            if sa_path not in _sys.path:
+                _sys.path.append(sa_path)
+            import sascorer
+            score = sascorer.calculateScore(mol)
+        except Exception:
+            from rdkit.Chem import Descriptors, rdMolDescriptors
+            mw = Descriptors.MolWt(mol)
+            rings = rdMolDescriptors.CalcNumRings(mol)
+            stereo = len(Chem.FindMolChiralCenters(mol, includeUnassigned=True))
+            score = min(10.0, max(1.0, 1.5 + (mw / 200) + rings * 0.5 + stereo * 0.8))
+        return {"sa_score": round(score, 2)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/scaffold")
+def chem_scaffold(req: ChemSmilesRequest):
+    """Extract Bemis-Murcko scaffold."""
+    try:
+        from rdkit import Chem
+        from rdkit.Chem.Scaffolds import MurckoScaffold
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+        scaffold_mol = MurckoScaffold.GetScaffoldForMol(mol)
+        scaffold_smiles = Chem.MolToSmiles(scaffold_mol) if scaffold_mol else ""
+        generic_mol = MurckoScaffold.MakeScaffoldGeneric(scaffold_mol) if scaffold_mol else None
+        generic_smiles = Chem.MolToSmiles(generic_mol) if generic_mol else ""
+        return {"scaffold": scaffold_smiles, "generic_scaffold": generic_smiles}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/nmr-predict")
+def chem_nmr_predict(req: ChemSmilesRequest):
+    """
+    Rule-based estimated 1H/13C NMR chemical shifts.
+    DISCLAIMER: Rule-based estimates, not experimental data.
+    """
+    try:
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+
+        peaks = []
+        for atom in mol.GetAtoms():
+            symbol = atom.GetSymbol()
+            idx = atom.GetIdx()
+            neighbors = [n.GetSymbol() for n in atom.GetNeighbors()]
+            is_aromatic = atom.GetIsAromatic()
+
+            if symbol == "C":
+                if is_aromatic:
+                    peaks.append({"atom": f"C{idx}", "environment": "Aromatic C", "shift_min": 110, "shift_max": 160, "nucleus": "13C"})
+                elif "O" in neighbors and "N" in neighbors:
+                    peaks.append({"atom": f"C{idx}", "environment": "C-O + C-N", "shift_min": 155, "shift_max": 175, "nucleus": "13C"})
+                elif "O" in neighbors:
+                    peaks.append({"atom": f"C{idx}", "environment": "C-O", "shift_min": 50, "shift_max": 85, "nucleus": "13C"})
+                elif "N" in neighbors:
+                    peaks.append({"atom": f"C{idx}", "environment": "C-N", "shift_min": 30, "shift_max": 60, "nucleus": "13C"})
+                elif "F" in neighbors or "Cl" in neighbors or "Br" in neighbors:
+                    peaks.append({"atom": f"C{idx}", "environment": "C-halide", "shift_min": 20, "shift_max": 50, "nucleus": "13C"})
+                else:
+                    peaks.append({"atom": f"C{idx}", "environment": "Alkyl C", "shift_min": 10, "shift_max": 45, "nucleus": "13C"})
+
+                h_count = atom.GetTotalNumHs()
+                if h_count > 0:
+                    if is_aromatic:
+                        peaks.append({"atom": f"H on C{idx}", "environment": "ArH", "shift_min": 6, "shift_max": 9, "nucleus": "1H"})
+                    elif "O" in neighbors:
+                        peaks.append({"atom": f"H on C{idx}", "environment": "H-C-O", "shift_min": 3, "shift_max": 5, "nucleus": "1H"})
+                    elif "N" in neighbors:
+                        peaks.append({"atom": f"H on C{idx}", "environment": "H-C-N", "shift_min": 2, "shift_max": 4, "nucleus": "1H"})
+                    else:
+                        peaks.append({"atom": f"H on C{idx}", "environment": "Alkyl H", "shift_min": 0, "shift_max": 3, "nucleus": "1H"})
+
+            elif symbol == "O" and atom.GetTotalNumHs() > 0:
+                if is_aromatic or any(n.GetIsAromatic() for n in atom.GetNeighbors()):
+                    peaks.append({"atom": f"OH{idx}", "environment": "Phenol OH", "shift_min": 4, "shift_max": 12, "nucleus": "1H"})
+                else:
+                    peaks.append({"atom": f"OH{idx}", "environment": "Alcohol OH", "shift_min": 1, "shift_max": 5, "nucleus": "1H"})
+
+            elif symbol == "N" and atom.GetTotalNumHs() > 0:
+                if is_aromatic:
+                    peaks.append({"atom": f"NH{idx}", "environment": "ArNH", "shift_min": 7, "shift_max": 12, "nucleus": "1H"})
+                else:
+                    peaks.append({"atom": f"NH{idx}", "environment": "Amine NH", "shift_min": 1, "shift_max": 4, "nucleus": "1H"})
+
+        peaks = peaks[:30]
+        return {"peaks": peaks, "disclaimer": "Rule-based estimates — not experimental data"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/scaffold-cuts")
+def chem_scaffold_cuts(req: ChemSmilesRequest):
+    """
+    Suggest medicinal chemistry scaffold disconnections.
+    Educational bond cut analysis, not a full retrosynthesis engine.
+    """
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import rdMolDescriptors
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+
+        CUT_PATTERNS = [
+            ("Amide bond", "[CX3](=O)[NX3]", "C(=O)-N", "High-priority amide disconnection (→ acid + amine)"),
+            ("Ester bond", "[CX3](=O)[OX2][CX4]", "C(=O)-O", "Ester disconnection (→ acid + alcohol)"),
+            ("C-N bond (aryl)", "[c][NX3]", "Ar-N", "Aryl-nitrogen disconnect (Buchwald coupling)"),
+            ("C-O bond (aryl)", "[c][OX2]", "Ar-O", "Aryl ether disconnect (Ullmann coupling)"),
+            ("Sulfonamide", "[SX4](=O)(=O)[NX3]", "S(=O)2-N", "Sulfonamide disconnect (→ sulfonyl chloride + amine)"),
+            ("Urea", "[NX3]C(=O)[NX3]", "N-C(=O)-N", "Urea disconnect (→ isocyanate + amine)"),
+        ]
+
+        cuts = []
+        for bond_type, smarts, short, reason in CUT_PATTERNS:
+            try:
+                patt = Chem.MolFromSmarts(smarts)
+                if patt and mol.HasSubstructMatch(patt):
+                    try:
+                        from rdkit.Chem import AllChem, FragmentMol
+                        matches = mol.GetSubstructMatches(patt)
+                        match = matches[0]
+                        if len(match) >= 2:
+                            bond = mol.GetBondBetweenAtoms(match[-2], match[-1])
+                            if bond:
+                                from rdkit.Chem import FragmentOnBonds
+                                frags = Chem.FragmentOnBonds(mol, [bond.GetIdx()], addDummies=False)
+                                frag_smiles = Chem.MolToSmiles(frags).split(".")
+                                if len(frag_smiles) >= 2:
+                                    cuts.append({
+                                        "bond_type": bond_type,
+                                        "reason": reason,
+                                        "fragment1": frag_smiles[0],
+                                        "fragment2": frag_smiles[1],
+                                    })
+                                    continue
+                    except Exception:
+                        pass
+                    cuts.append({"bond_type": bond_type, "reason": reason, "fragment1": "", "fragment2": ""})
+            except Exception:
+                continue
+            if len(cuts) >= 3:
+                break
+
+        return {"cuts": cuts, "disclaimer": "Suggested disconnections for medicinal chemistry exploration"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/similarity-search")
+async def chem_similarity_search(req: Dict[str, Any] = Body(...)):
+    """PubChem Tanimoto similarity search via PUG REST."""
+    smiles = req.get("smiles", "")
+    threshold = req.get("threshold", 0.7)
+    max_results = req.get("max_results", 10)
+    if not smiles:
+        raise HTTPException(status_code=400, detail="smiles required")
+    try:
+        import httpx
+        encoded = smiles.replace("/", "%2F").replace("+", "%2B").replace("#", "%23").replace("@", "%40")
+        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/similarity/smiles/{encoded}/JSON?Threshold={int(threshold*100)}&MaxRecords={max_results}"
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(url)
+            if not resp.is_success:
+                return {"results": []}
+            data = resp.json()
+
+        props_list = data.get("PropertyTable", {}).get("Properties", [])
+        results = []
+        for p in props_list[:max_results]:
+            results.append({
+                "cid": p.get("CID", 0),
+                "smiles": p.get("IsomericSMILES", p.get("CanonicalSMILES", "")),
+                "name": p.get("IUPACName", f"CID_{p.get('CID', 0)}"),
+                "tanimoto": threshold + (1 - threshold) * 0.5,
+            })
+        return {"results": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/to-smarts")
+def chem_to_smarts(req: ChemSmilesRequest):
+    """Convert SMILES to SMARTS via RDKit."""
+    try:
+        from rdkit import Chem
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+        smarts = Chem.MolToSmarts(mol)
+        return {"smarts": smarts}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/iupac")
+def chem_iupac(req: ChemSmilesRequest):
+    """Get IUPAC name from PubChem (server-side proxy to avoid CORS)."""
+    try:
+        import urllib.request
+        from urllib.parse import quote
+        q = quote(req.smiles)
+        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{q}/property/IUPACName/JSON"
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+        name = data.get("PropertyTable", {}).get("Properties", [{}])[0].get("IUPACName", "")
+        return {"iupac": name}
+    except Exception:
+        return {"iupac": ""}
+
+
+@app.post("/api/chem/inchi")
+def chem_inchi(req: ChemSmilesRequest):
+    """Generate InChI and InChIKey from SMILES."""
+    try:
+        from rdkit import Chem
+        from rdkit.Chem.inchi import MolToInchi, InchiToInchiKey
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+        inchi = MolToInchi(mol) or ""
+        inchi_key = InchiToInchiKey(inchi) if inchi else ""
+        return {"inchi": inchi, "inchi_key": inchi_key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/conformers")
+def chem_conformers(req: Dict[str, Any] = Body(...)):
+    """Generate 3D conformers from SMILES and return PDB + energies."""
+    smiles = req.get("smiles", "")
+    n_conformers = min(int(req.get("n_conformers", 3)), 10)
+    if not smiles:
+        raise HTTPException(status_code=400, detail="smiles required")
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+        mol = Chem.MolFromSmiles(smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+        mol = Chem.AddHs(mol)
+        params = AllChem.ETKDGv3()
+        params.randomSeed = 42
+        ids = AllChem.EmbedMultipleConfs(mol, numConfs=n_conformers, params=params)
+        if not ids:
+            raise HTTPException(status_code=422, detail="Could not generate 3D conformers")
+        energies = []
+        for cid in ids:
+            ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=cid)
+            if ff:
+                ff.Minimize()
+                energies.append(round(ff.CalcEnergy(), 3))
+            else:
+                energies.append(0.0)
+        pdb = Chem.MolToPDBBlock(mol, confId=int(ids[0]))
+        return {"n_conformers": len(ids), "energies": energies, "pdb": pdb}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chem/docking-prep")
+def chem_docking_prep(req: ChemSmilesRequest):
+    """Compute docking preparation info: charge, rotatable bonds, atom count, MW, LogP."""
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import Descriptors, rdMolDescriptors
+        mol = Chem.MolFromSmiles(req.smiles)
+        if not mol:
+            raise HTTPException(status_code=400, detail="Invalid SMILES")
+        charge = sum(a.GetFormalCharge() for a in mol.GetAtoms())
+        return {
+            "ready_for_docking": True,
+            "n_atoms": mol.GetNumAtoms(),
+            "n_heavy_atoms": mol.GetNumHeavyAtoms(),
+            "charge": charge,
+            "mw": round(Descriptors.MolWt(mol), 2),
+            "logp": round(Descriptors.MolLogP(mol), 2),
+            "n_rotatable": rdMolDescriptors.CalcNumRotatableBonds(mol),
+            "n_rings": rdMolDescriptors.CalcNumRings(mol),
+            "hbd": rdMolDescriptors.CalcNumHBD(mol),
+            "hba": rdMolDescriptors.CalcNumHBA(mol),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
 # SPA catch-all - must be LAST route
 # ============================================================
 
