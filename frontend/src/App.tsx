@@ -15,6 +15,7 @@ import { Pharmacophore } from '@/pages/Pharmacophore'
 import { QSARModeling } from '@/pages/QSARModeling'
 import { MoleculeDynamics } from '@/pages/MoleculeDynamics'
 import { ADMET } from '@/pages/ADMET'
+import { Documentation } from '@/pages/Documentation'
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
           <Route path="/ai" element={<AIAssistant />} />
           <Route path="/security" element={<Security />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/documentation" element={<Documentation />} />
         </Route>
       </Routes>
     </BrowserRouter>
