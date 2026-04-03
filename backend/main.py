@@ -5083,6 +5083,144 @@ def classroom_list_rubrics():
     }
 
 
+# ============================================================
+# QSAR Modeling Endpoints
+# ============================================================
+
+@app.get("/qsar/descriptor-groups")
+def qsar_descriptor_groups():
+    """Return available molecular descriptor groups"""
+    from qsar import get_descriptor_groups
+    return get_descriptor_groups()
+
+
+@app.post("/qsar/descriptors")
+def qsar_descriptors(req: Dict):
+    """Calculate descriptors for a list of SMILES"""
+    from qsar import calculate_descriptors
+    smiles = req.get("smiles", [])
+    groups = req.get("groups")
+    return calculate_descriptors(smiles, groups)
+
+
+@app.post("/qsar/descriptors/upload")
+async def qsar_upload_dataset(
+    file: UploadFile = File(...),
+    smiles_col: str = Form("smiles"),
+    activity_col: str = Form("activity"),
+    groups: Optional[str] = Form(None),
+):
+    """Upload a CSV file and compute descriptors for the whole dataset"""
+    from qsar import process_dataset_csv
+    content = await file.read()
+    result = process_dataset_csv(content, smiles_col, activity_col, groups)
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.post("/qsar/train")
+def qsar_train(req: Dict):
+    """Start a QSAR model training job (async)"""
+    from qsar import start_training_job
+    X = req.get("X", [])
+    y = req.get("y", [])
+    feature_names = req.get("feature_names", [])
+    model_type = req.get("model_type", "RandomForest")
+    model_name = req.get("model_name", "QSAR Model")
+    activity_column = req.get("activity_column", "activity")
+    descriptor_groups = req.get("descriptor_groups", ["all"])
+    cv_folds = int(req.get("cv_folds", 5))
+    model_params = req.get("model_params")
+
+    if not X or not y:
+        raise HTTPException(status_code=400, detail="X and y data required")
+
+    job_id = start_training_job(
+        X, y, feature_names, model_type, model_name,
+        activity_column, descriptor_groups, cv_folds, model_params
+    )
+    return {"job_id": job_id, "status": "pending", "message": "Training started"}
+
+
+@app.get("/qsar/train/{job_id}/status")
+def qsar_train_status(job_id: str):
+    """Get training job status"""
+    from qsar import get_training_status
+    return get_training_status(job_id)
+
+
+@app.get("/qsar/train/{job_id}/results")
+def qsar_train_results(job_id: str):
+    """Get training job results"""
+    from qsar import get_training_status
+    data = get_training_status(job_id)
+    return data
+
+
+@app.post("/qsar/predict")
+def qsar_predict_single(req: Dict):
+    """Predict activity for a single SMILES"""
+    from qsar import predict_single as _predict_single
+    model_id = req.get("model_id", "")
+    smiles = req.get("smiles", "")
+    if not model_id or not smiles:
+        raise HTTPException(status_code=400, detail="model_id and smiles required")
+    result = _predict_single(model_id, smiles)
+    if "error" in result and not result.get("success"):
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
+@app.post("/qsar/predict/batch")
+def qsar_predict_batch(req: Dict):
+    """Predict activity for a batch of SMILES"""
+    from qsar import predict_batch as _predict_batch
+    model_id = req.get("model_id", "")
+    smiles_list = req.get("smiles_list", [])
+    if not model_id or not smiles_list:
+        raise HTTPException(status_code=400, detail="model_id and smiles_list required")
+    return _predict_batch(model_id, smiles_list)
+
+
+@app.get("/qsar/models")
+def qsar_list_models():
+    """List all saved QSAR models"""
+    from qsar import list_models as _list_models
+    return {"models": _list_models()}
+
+
+@app.get("/qsar/models/{model_id}")
+def qsar_get_model(model_id: str):
+    """Get a specific QSAR model's metadata"""
+    from qsar import get_model as _get_model
+    model = _get_model(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+    return model
+
+
+@app.delete("/qsar/models/{model_id}")
+def qsar_delete_model(model_id: str):
+    """Delete a saved QSAR model"""
+    from qsar import delete_model as _delete_model
+    ok = _delete_model(model_id)
+    return {"success": ok, "model_id": model_id}
+
+
+# ============================================================
+# SPA catch-all - must be LAST route
+# ============================================================
+
+@app.get("/{full_path:path}")
+async def spa_catch_all(full_path: str):
+    """Serve the React SPA for any unmatched path (client-side routing)"""
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail=f"Path /{full_path} not found")
+
+
 if __name__ == "__main__":
     import uvicorn
 
