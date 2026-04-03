@@ -247,10 +247,10 @@ def mol_to_pdbqt(mol, is_ligand: bool = True) -> str:
         for i, atom in enumerate(mol.GetAtoms()):
             pos = conf.GetPositions()[i]
             pdbqt_lines.append(
-                f"HETATM{((i+1)%99999):5d}  {atom.GetSymbol():<2}{' ':<1}"
-                f"{'LIG':<3} A{((i//9999)+1):4d}    "
+                f"HETATM{((i+1)%99999):5d}  {atom.GetSymbol():<2} "
+                f" {'LIG':<3} A{((i//9999)+1):4d}    "
                 f"{pos[0]:8.3f}{pos[1]:8.3f}{pos[2]:8.3f}"
-                f"  1.00  0.00           {atom.GetSymbol():>2}"
+                f"  1.00  0.00    {0.000:6.3f} {atom.GetSymbol():>2}"
             )
         
         pdbqt_lines.append("ENDROOT")
@@ -270,10 +270,10 @@ def mol_to_pdbqt(mol, is_ligand: bool = True) -> str:
             charge = 0.0
             
             pdbqt_lines.append(
-                f"ATOM  {((i+1)%99999):5d}  {atom.GetSymbol():<2}{' ':<1}"
-                f"{'PRO':<3} A{((i//9999)+1):4d}    "
+                f"ATOM  {((i+1)%99999):5d}  {atom.GetSymbol():<2} "
+                f" {'PRO':<3} A{((i//9999)+1):4d}    "
                 f"{pos[0]:8.3f}{pos[1]:8.3f}{pos[2]:8.3f}"
-                f"  1.00  0.00          {ad_type:<2}{charge:6.3f}"
+                f"  1.00  0.00    {charge:6.3f} {ad_type:<2}"
             )
     
     pdbqt_lines.append("END")
@@ -591,7 +591,7 @@ DIMENSIONS = {int(size_x/0.375)} x {int(size_y/0.375)} x {int(size_z/0.375)}
             
             logger.info(f"[Vina] Initializing with receptor: {receptor_pdbqt}")
             v = Vina(sf_name='vina')
-            v.set_receptor(rigid_pdbqt_filename=receptor_pdbqt)
+            v.set_receptor(receptor_pdbqt)
             v.set_ligand_from_file(ligand_pdbqt)
             
             logger.info(f"[Vina] Computing maps at center=({center_x},{center_y},{center_z})")
