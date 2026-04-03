@@ -28,7 +28,7 @@ from analysis import (
     calculate_advanced_interactions,
     get_binding_site_residues,
 )
-from docking_engine import check_gnina
+from docking_engine import check_gnina, check_vina, check_vina
 from db import (
     init_db,
     create_job,
