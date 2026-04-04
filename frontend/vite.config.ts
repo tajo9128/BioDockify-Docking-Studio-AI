@@ -11,7 +11,8 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['bowser', 'plotly.js', 'react-plotly.js'],
+    include: ['bowser', 'plotly.js', 'react-plotly.js', 'ketcher-core', 'ketcher-react', 'ketcher-standalone'],
+    exclude: [],
   },
   build: {
     outDir: './dist',
@@ -28,28 +29,6 @@ export default defineConfig({
           plotly: ['plotly.js', 'react-plotly.js'],
         },
       },
-    },
-  },
-  build: {
-    outDir: './dist',
-    emptyOutDir: true,
-    sourcemap: false,
-    commonjsOptions: {
-      transformMixedEsModules: true,
-    },
-    rollupOptions: {
-      external: [],
-    },
-  },
-  build: {
-    outDir: './dist',
-    emptyOutDir: true,
-    sourcemap: false,
-    commonjsOptions: {
-      transformMixedEsModules: true,
-    },
-    rollupOptions: {
-      external: [],
     },
   },
   server: {

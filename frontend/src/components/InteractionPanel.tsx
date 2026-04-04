@@ -96,7 +96,7 @@ export function InteractionPanel({ ligandPdb, receptorPdb, isDark }: Interaction
             }`}
           >
             {tab.icon} {tab.label}
-            {tab.count != null && tab.count > 0 && (
+            {tab.count !== null && tab.count !== undefined && tab.count > 0 && (
               <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
                 isDark ? 'bg-gray-600' : 'bg-gray-200'
               }`}>

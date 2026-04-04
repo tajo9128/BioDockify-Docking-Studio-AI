@@ -287,13 +287,12 @@ def mol_to_pdbqt(mol, is_ligand: bool = True) -> str:
             pos = positions[i]
             serial = (i + 1) % 99999
             name = atom.GetSymbol()
-            atom_name = name.rjust(4)
             charge = _gasteiger(atom)
 
             line = (
-                f"HETATM{serial:>5d} {atom_name} LIG A{(i // 9999) + 1:>4d}    "
+                f"HETATM{serial:>5d} {name:<4s} LIG A{(i // 9999) + 1:>4d}    "
                 f"{pos[0]:>8.3f}{pos[1]:>8.3f}{pos[2]:>8.3f}"
-                f"{1.00:>6.2f}{0.00:>6.2f}          {name:>2s}{charge:>+8.3f}"
+                f"{1.00:>6.2f}{0.00:>6.2f}          {name:<2s}{charge:>+8.3f}"
             )
             pdbqt_lines.append(line)
 
@@ -303,15 +302,13 @@ def mol_to_pdbqt(mol, is_ligand: bool = True) -> str:
         num_rotatable = 0
         for bond in mol.GetBonds():
             if bond.GetBondType() == Chem.rdchem.BondType.SINGLE:
-                # Skip bonds to terminal atoms (hydrogens, halogens)
                 a1 = bond.GetBeginAtom()
                 a2 = bond.GetEndAtom()
                 if a1.GetDegree() > 1 and a2.GetDegree() > 1:
-                    # Skip amide bonds (C-N in peptide)
-                    if not (a1.GetAtomicNum() == 6 and a2.GetAtomicNum() == 7 and 
+                    if not (a1.GetAtomicNum() == 6 and a2.GetAtomicNum() == 7 and
                             any(n.GetSymbol() == 'O' for n in a1.GetNeighbors())):
                         num_rotatable += 1
-        
+
         pdbqt_lines.append(f"TORSDOF {num_rotatable}")
 
     else:
@@ -323,13 +320,12 @@ def mol_to_pdbqt(mol, is_ligand: bool = True) -> str:
             name = atom.GetSymbol()
             atomic_num = atom.GetAtomicNum()
             ad_type = get_ad4_atom_type(atomic_num)
-            atom_name = name.rjust(4)
             charge = _gasteiger(atom)
 
             line = (
-                f"ATOM  {serial:>5d} {atom_name} PRO A{(i // 9999) + 1:>4d}    "
+                f"ATOM  {serial:>5d} {name:<4s} PRO A{(i // 9999) + 1:>4d}    "
                 f"{pos[0]:>8.3f}{pos[1]:>8.3f}{pos[2]:>8.3f}"
-                f"{1.00:>6.2f}{0.00:>6.2f}          {ad_type:>2s}{charge:>+8.3f}"
+                f"{1.00:>6.2f}{0.00:>6.2f}          {ad_type:<2s}{charge:>+8.3f}"
             )
             pdbqt_lines.append(line)
 
