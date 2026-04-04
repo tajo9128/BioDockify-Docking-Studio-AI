@@ -10,25 +10,21 @@ import requests
 import logging
 from typing import Dict, Optional
 
-from .config import (
-    OLLAMA_URL,
-    OLLAMA_MODEL,
-    AI_MODE,
-    ALLOW_AI,
-    OLLAMA_TIMEOUT
-)
+from .config import OLLAMA_URL, OLLAMA_MODEL, AI_MODE, ALLOW_AI, OLLAMA_TIMEOUT
 from .offline_engine import OfflineAssistant
 
 logger = logging.getLogger(__name__)
 
-_CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "llm_config.json")
+_CONFIG_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "llm_config.json"
+)
 
 
 def _load_config() -> Dict:
     """Load LLM config from file"""
     try:
         if os.path.exists(_CONFIG_FILE):
-            with open(_CONFIG_FILE, 'r') as f:
+            with open(_CONFIG_FILE, "r") as f:
                 return json.load(f)
     except Exception as e:
         logger.warning(f"Failed to load LLM config: {e}")
@@ -38,7 +34,7 @@ def _load_config() -> Dict:
 def save_config(config: Dict):
     """Save LLM config to file"""
     try:
-        with open(_CONFIG_FILE, 'w') as f:
+        with open(_CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=2)
         logger.info(f"LLM config saved: provider={config.get('provider', 'unknown')}")
     except Exception as e:
@@ -126,7 +122,9 @@ class OllamaProvider:
 class APIProvider:
     """OpenAI-compatible API provider (DeepSeek, OpenAI, Mistral, Groq, etc.)"""
 
-    def __init__(self, provider: str, api_key: str, base_url: str = "", model: str = ""):
+    def __init__(
+        self, provider: str, api_key: str, base_url: str = "", model: str = ""
+    ):
         self.provider = provider
         self.api_key = api_key
         self.base_url = (base_url or PROVIDER_URLS.get(provider, "")).rstrip("/")
@@ -137,36 +135,83 @@ class APIProvider:
         if not self.api_key or not self.base_url:
             return False
         try:
-            headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-            resp = requests.get(
-                f"{self.base_url}/models", headers=headers, timeout=10
-            )
-            return resp.status_code in (200, 401, 403)  # 401/403 means reachable but auth issue
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            resp = requests.get(f"{self.base_url}/models", headers=headers, timeout=10)
+            return resp.status_code in (
+                200,
+                401,
+                403,
+            )  # 401/403 means reachable but auth issue
         except Exception:
             # Try a minimal chat completion as fallback check
             try:
-                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                headers = {
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                }
                 resp = requests.post(
                     f"{self.base_url}/chat/completions",
                     headers=headers,
-                    json={"model": self.model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
-                    timeout=15
+                    json={
+                        "model": self.model,
+                        "messages": [{"role": "user", "content": "hi"}],
+                        "max_tokens": 1,
+                    },
+                    timeout=15,
                 )
                 return resp.status_code in (200, 400, 401, 403, 429)
             except Exception:
                 return False
 
     def chat(self, prompt: str) -> str:
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
         messages = [
-            {"role": "system", "content": "You are BioDockify AI, an expert drug discovery assistant. Help with molecular docking, pharmacology, ADMET, and computational chemistry."},
-            {"role": "user", "content": prompt}
+            {
+                "role": "system",
+                "content": """You are BioDockify AI, an expert drug discovery assistant built into BioDockify Studio AI — a free, open-source alternative to BIOVIA Discovery Studio and Schrödinger.
+
+ABOUT THE SOFTWARE:
+BioDockify Studio AI is a comprehensive molecular docking and drug discovery platform with:
+- **Molecular Docking**: AutoDock Vina, GNINA (CNN scoring), RF-Score, consensus scoring
+- **Batch Docking**: Screen multiple ligands with composite scoring (GNINA 50% + LE 25% + QED 15% + diversity 10%)
+- **Pharmacophore Modeling**: Feature-based and structure-based pharmacophore design
+- **QSAR Modeling**: Train ML models (RandomForest, GradientBoosting, SVR, PLS, Ridge, Lasso) with Y-scrambling and SHAP analysis
+- **ADMET Prediction**: Absorption, Distribution, Metabolism, Excretion, Toxicity predictions
+- **Molecular Dynamics**: GPU-accelerated MD simulations with trajectory visualization
+- **ChemDraw**: Interactive molecule editor with SMILES, InChI, and structure drawing
+- **Ligand Modifier**: RDKit-based chemical transformations and scaffold hopping
+- **3D Viewer**: Interactive 3Dmol.js visualization of docking poses and trajectories
+- **RMSD Analysis**: Structural comparison and clustering
+- **Interaction Analysis**: Hydrogen bonds, hydrophobic contacts, pi-stacking, salt bridges
+- **AI Assistant**: Powered by Ollama, OpenAI, DeepSeek, or offline fallback
+- **CrewAI**: Multi-agent AI orchestration for complex drug discovery workflows
+- **Knowledge Graph**: Target-compound-pathway-literature integration
+
+FEATURES:
+- Multi-language support (English, Spanish, Chinese, Arabic)
+- Dark/light themes with accessibility options
+- Real-time job queue management
+- Composite scoring with GNINA CNN, Vina, and RF-Score
+- Smart routing: strong binders (≤-5.0) exit at Vina, weak binders proceed to GNINA+RF
+- GPU acceleration detection (NVIDIA CUDA)
+- Docker-based deployment
+- Desktop application via PyInstaller
+
+Always be helpful, accurate, and specific about the software's capabilities. If a feature exists, explain how to use it. If not, be honest and suggest alternatives.""",
+            },
+            {"role": "user", "content": prompt},
         ]
         resp = requests.post(
             f"{self.base_url}/chat/completions",
             headers=headers,
             json={"model": self.model, "messages": messages, "max_tokens": 2048},
-            timeout=60
+            timeout=60,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -187,20 +232,32 @@ class LLMRouter:
 
     def _init_providers(self):
         """Initialize provider instances with URL normalization for Docker."""
-        saved_model = self._config.get("model") if self._config.get("provider") == "ollama" else None
-        saved_url = self._config.get("base_url") if self._config.get("provider") == "ollama" else None
+        saved_model = (
+            self._config.get("model")
+            if self._config.get("provider") == "ollama"
+            else None
+        )
+        saved_url = (
+            self._config.get("base_url")
+            if self._config.get("provider") == "ollama"
+            else None
+        )
 
         # Normalize URL: replace localhost with host.docker.internal for Docker compatibility
         if saved_url and "localhost" in saved_url:
             saved_url = saved_url.replace("localhost", "host.docker.internal")
 
         # Strip /v1 suffix (OllamaProvider adds it itself for chat)
-        ollama_base = (saved_url.rstrip("/").removesuffix("/v1") if saved_url else None) or OLLAMA_URL
+        ollama_base = (
+            saved_url.rstrip("/").removesuffix("/v1") if saved_url else None
+        ) or OLLAMA_URL
         self.ollama = OllamaProvider(url=ollama_base, model=saved_model or OLLAMA_MODEL)
         self.offline = OfflineAssistant()
         self._provider = None
         self._api_provider = None
-        logger.info(f"LLMRouter initialized (ollama url={ollama_base}, model={self.ollama.model})")
+        logger.info(
+            f"LLMRouter initialized (ollama url={ollama_base}, model={self.ollama.model})"
+        )
 
     def reset(self):
         """Reset provider detection and re-read config."""
@@ -303,7 +360,7 @@ class LLMRouter:
                 return {
                     "response": response_text,
                     "provider": "ollama",
-                    "available": True
+                    "available": True,
                 }
             except Exception as e:
                 logger.warning(f"Ollama failed: {e}")
@@ -312,7 +369,7 @@ class LLMRouter:
                     "response": response_text,
                     "provider": "offline",
                     "available": False,
-                    "error": str(e)
+                    "error": str(e),
                 }
 
         # API providers (OpenAI, DeepSeek, Groq, custom, etc.)
@@ -322,7 +379,7 @@ class LLMRouter:
                 return {
                     "response": response_text,
                     "provider": detected,
-                    "available": True
+                    "available": True,
                 }
             except Exception as e:
                 logger.warning(f"{detected} failed: {e}")
@@ -331,16 +388,12 @@ class LLMRouter:
                     "response": response_text,
                     "provider": "offline",
                     "available": False,
-                    "error": str(e)
+                    "error": str(e),
                 }
 
         # Offline fallback
         response_text = self.offline.respond(message)
-        return {
-            "response": response_text,
-            "provider": "offline",
-            "available": False
-        }
+        return {"response": response_text, "provider": "offline", "available": False}
 
     def reset(self):
         """Reset provider cache and reload config"""

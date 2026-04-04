@@ -189,7 +189,9 @@ def health():
         try:
             import requests
 
-            ollama_url = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
+            ollama_url = os.environ.get(
+                "OLLAMA_URL", "http://host.docker.internal:11434"
+            )
             response = requests.get(f"{ollama_url}/api/tags", timeout=3)
             if response.status_code == 200:
                 data = response.json()
@@ -311,7 +313,9 @@ def system_status():
         # Check Ollama
         ollama_available = False
         try:
-            ollama_url = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
+            ollama_url = os.environ.get(
+                "OLLAMA_URL", "http://host.docker.internal:11434"
+            )
             response = requests.get(f"{ollama_url}/api/tags", timeout=3)
             ollama_available = response.status_code == 200
         except:
@@ -748,10 +752,19 @@ def add_result(
 ):
     """Add docking result for a pose"""
     success = add_docking_result(
-        job_uuid, pose_id, ligand_name, vina_score, gnina_score, rf_score, pdb_data,
-        hydrophobic_term=hydrophobic_term, rotatable_penalty=rotatable_penalty,
-        lipo_contact=lipo_contact, final_score=final_score,
-        composite_score=composite_score, constraint_penalty=constraint_penalty,
+        job_uuid,
+        pose_id,
+        ligand_name,
+        vina_score,
+        gnina_score,
+        rf_score,
+        pdb_data,
+        hydrophobic_term=hydrophobic_term,
+        rotatable_penalty=rotatable_penalty,
+        lipo_contact=lipo_contact,
+        final_score=final_score,
+        composite_score=composite_score,
+        constraint_penalty=constraint_penalty,
     )
     if success:
         return {"status": "added"}
@@ -1046,8 +1059,12 @@ def api_docking_run(req: DockingRunRequest):
                 receptor_content=receptor_content,
                 ligand_content=ligand_content,
                 input_format=input_format,
-                center_x=req.center_x, center_y=req.center_y, center_z=req.center_z,
-                size_x=req.size_x, size_y=req.size_y, size_z=req.size_z,
+                center_x=req.center_x,
+                center_y=req.center_y,
+                center_z=req.center_z,
+                size_x=req.size_x,
+                size_y=req.size_y,
+                size_z=req.size_z,
                 exhaustiveness=req.exhaustiveness,
                 num_modes=req.num_modes,
                 output_dir=STORAGE_DIR,
@@ -1070,7 +1087,9 @@ def api_docking_run(req: DockingRunRequest):
             for r in results:
                 try:
                     add_docking_result(
-                        job_id, r.get("mode", 1), "ligand",
+                        job_id,
+                        r.get("mode", 1),
+                        "ligand",
                         vina_score=r.get("vina_score"),
                         gnina_score=r.get("gnina_score"),
                         rf_score=r.get("rf_score"),
@@ -1119,7 +1138,8 @@ def api_docking_run(req: DockingRunRequest):
                 "message": f"Docking complete - {len(results)} poses generated",
             }
             DockingProgress.set_status(
-                job_id, "completed",
+                job_id,
+                "completed",
                 f"Done - {len(results)} poses, best {best_score:.2f} kcal/mol",
                 results=results,
                 files=docking_result.get("files", {}),
@@ -1152,8 +1172,11 @@ def api_docking_result(job_id: str):
     if progress.get("status") == "completed" and "full_payload" in progress:
         return progress["full_payload"]
     if progress.get("status") == "failed":
-        return {"job_id": job_id, "status": "failed",
-                "error": progress.get("message", "Unknown error")}
+        return {
+            "job_id": job_id,
+            "status": "failed",
+            "error": progress.get("message", "Unknown error"),
+        }
 
     # In-memory miss — try DB
     row = get_job_full(job_id)
@@ -1192,8 +1215,11 @@ def api_docking_result(job_id: str):
     if row and row.get("status") == "failed":
         return {"job_id": job_id, "status": "failed", "error": "Job failed"}
 
-    return {"job_id": job_id, "status": progress.get("status", "unknown"),
-            "message": progress.get("message", "")}
+    return {
+        "job_id": job_id,
+        "status": progress.get("status", "unknown"),
+        "message": progress.get("message", ""),
+    }
 
 
 def _files_to_download_urls(files: dict) -> dict:
@@ -1265,35 +1291,41 @@ def api_ai_job_explain(req: JobExplainRequest):
     scores_text = ""
     for r in results[:10]:
         scores_text += (
-            f"  Pose {r.get('pose_id', '?')}: "
-            f"Vina={r.get('vina_score'):.2f if r.get('vina_score') is not None else 'N/A'} "
-            f"GNINA={r.get('gnina_score'):.2f if r.get('gnina_score') is not None else 'N/A'} "
-            f"Composite={r.get('composite_score'):.3f if r.get('composite_score') is not None else 'N/A'}\n"
-        ) if False else (
-            f"  Pose {r.get('pose_id', '?')}: "
-            f"Vina={r.get('vina_score')}, GNINA={r.get('gnina_score')}, "
-            f"Composite={r.get('composite_score')}\n"
+            (
+                f"  Pose {r.get('pose_id', '?')}: "
+                f"Vina={r.get('vina_score'):.2f if r.get('vina_score') is not None else 'N/A'} "
+                f"GNINA={r.get('gnina_score'):.2f if r.get('gnina_score') is not None else 'N/A'} "
+                f"Composite={r.get('composite_score'):.3f if r.get('composite_score') is not None else 'N/A'}\n"
+            )
+            if False
+            else (
+                f"  Pose {r.get('pose_id', '?')}: "
+                f"Vina={r.get('vina_score')}, GNINA={r.get('gnina_score')}, "
+                f"Composite={r.get('composite_score')}\n"
+            )
         )
 
     log_snippet = (row.get("log_text") or "")[:2000]
 
-    context = f"""You are BioDockify AI, an expert computational chemistry and drug discovery assistant.
+    context = f"""You are BioDockify AI, an expert computational chemistry and drug discovery assistant built into BioDockify Studio AI — a free, open-source alternative to BIOVIA Discovery Studio and Schrödinger.
+
+About the software: BioDockify Studio AI includes molecular docking (Vina, GNINA, RF-Score), batch docking with composite scoring (GNINA 50% + LE 25% + QED 15% + diversity 10%), pharmacophore modeling, QSAR modeling, ADMET prediction, molecular dynamics, ChemDraw, ligand modification, 3D visualization, RMSD analysis, interaction analysis, and AI-powered assistance.
 
 The user is asking about docking job ID: {req.job_id}
-Job name: {row.get('job_name')}
-Receptor: {row.get('receptor_name') or row.get('receptor_file', 'unknown')}
-Ligand: {row.get('ligand_name') or row.get('ligand_file', 'unknown')}
-Status: {row.get('status')}
-Engine: {row.get('engine')}
-Best binding energy: {row.get('binding_energy')} kcal/mol
-Created: {row.get('created_at')}
-Completed: {row.get('completed_at')}
+Job name: {row.get("job_name")}
+Receptor: {row.get("receptor_name") or row.get("receptor_file", "unknown")}
+Ligand: {row.get("ligand_name") or row.get("ligand_file", "unknown")}
+Status: {row.get("status")}
+Engine: {row.get("engine")}
+Best binding energy: {row.get("binding_energy")} kcal/mol
+Created: {row.get("created_at")}
+Completed: {row.get("completed_at")}
 
 Docking poses ({len(results)} total):
-{scores_text if scores_text else '  No pose data available.'}
+{scores_text if scores_text else "  No pose data available."}
 
 Log excerpt:
-{log_snippet if log_snippet else '  No log available.'}
+{log_snippet if log_snippet else "  No log available."}
 
 User question: {req.question}
 
@@ -1301,6 +1333,7 @@ Provide a clear, expert explanation. If discussing binding energy, note that mor
 
     try:
         from ai.llm_router import get_router
+
         router = get_router()
         result = router.chat(context)
         return {
@@ -1322,12 +1355,11 @@ def api_detect_binding_site(req: BindingSiteRequest):
     """Detect binding site center and grid box from a PDB receptor string."""
     try:
         from docking_engine import detect_binding_site
+
         return detect_binding_site(req.receptor_content)
     except Exception as e:
         logger.error(f"Binding site detection error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-
 
 
 @app.post("/api/chem/dock")
@@ -2036,9 +2068,14 @@ def get_gpu_status():
     def _run_nvidia_smi(cmd):
         try:
             result = subprocess.run(
-                [cmd, "--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu",
-                 "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=10,
+                [
+                    cmd,
+                    "--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10,
             )
             if result.returncode == 0:
                 gpus = []
@@ -2046,14 +2083,16 @@ def get_gpu_status():
                     parts = [p.strip() for p in line.split(",")]
                     if len(parts) >= 6:
                         try:
-                            gpus.append({
-                                "index": int(parts[0]),
-                                "name": parts[1],
-                                "utilization": int(parts[2]),
-                                "memory_used": int(parts[3]),
-                                "memory_total": int(parts[4]),
-                                "temperature": int(parts[5]),
-                            })
+                            gpus.append(
+                                {
+                                    "index": int(parts[0]),
+                                    "name": parts[1],
+                                    "utilization": int(parts[2]),
+                                    "memory_used": int(parts[3]),
+                                    "memory_total": int(parts[4]),
+                                    "temperature": int(parts[5]),
+                                }
+                            )
                         except (ValueError, IndexError):
                             continue
                 return gpus
@@ -2080,13 +2119,22 @@ def get_gpu_status():
     gpu_name = None
     try:
         import torch
+
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             vram = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
             return {
                 "available": True,
-                "gpus": [{"index": 0, "name": gpu_name, "memory_total": vram,
-                           "memory_used": 0, "utilization": 0, "temperature": 0}],
+                "gpus": [
+                    {
+                        "index": 0,
+                        "name": gpu_name,
+                        "memory_total": vram,
+                        "memory_used": 0,
+                        "utilization": 0,
+                        "temperature": 0,
+                    }
+                ],
                 "recommended_pipeline": "vina_gpu",
                 "vina_available": check_vina(),
                 "gnina_available": check_gnina(),
@@ -2106,9 +2154,17 @@ def get_gpu_status():
             if gpu_dirs:
                 return {
                     "available": True,
-                    "gpus": [{"index": i, "name": "NVIDIA GPU", "memory_total": 0,
-                               "memory_used": 0, "utilization": 0, "temperature": 0}
-                             for i in range(len(gpu_dirs))],
+                    "gpus": [
+                        {
+                            "index": i,
+                            "name": "NVIDIA GPU",
+                            "memory_total": 0,
+                            "memory_used": 0,
+                            "utilization": 0,
+                            "temperature": 0,
+                        }
+                        for i in range(len(gpu_dirs))
+                    ],
                     "recommended_pipeline": "vina_gpu",
                     "vina_available": check_vina(),
                     "gnina_available": check_gnina(),
@@ -2334,26 +2390,32 @@ def get_ollama_models():
 def update_llm_settings(settings: Dict[str, Any]):
     """Save LLM settings to both in-memory config AND llm_config.json for LLMRouter."""
     LLM_SETTINGS.update(settings)
-    
+
     # Also save to llm_config.json so LLMRouter picks it up
     try:
         from ai.llm_router import save_config
-        save_config({
-            "provider": settings.get("provider", "ollama"),
-            "model": settings.get("model", ""),
-            "api_key": settings.get("api_key", ""),
-            "base_url": settings.get("base_url", ""),
-            "temperature": settings.get("temperature", 0.7),
-            "max_tokens": settings.get("max_tokens", 4096),
-        })
+
+        save_config(
+            {
+                "provider": settings.get("provider", "ollama"),
+                "model": settings.get("model", ""),
+                "api_key": settings.get("api_key", ""),
+                "base_url": settings.get("base_url", ""),
+                "temperature": settings.get("temperature", 0.7),
+                "max_tokens": settings.get("max_tokens", 4096),
+            }
+        )
         # Reset router singleton to pick up new config
         from ai.llm_router import get_router
+
         router = get_router()
         router.reset()
-        logger.info(f"LLM settings saved and router reset: provider={settings.get('provider')}")
+        logger.info(
+            f"LLM settings saved and router reset: provider={settings.get('provider')}"
+        )
     except Exception as e:
         logger.error(f"Failed to save LLM config to file: {e}")
-    
+
     return {"status": "updated"}
 
 
@@ -2371,17 +2433,18 @@ def llm_test(req: LLMTestRequest):
     test_url = req.base_url or ""
     if "localhost" in test_url:
         test_url = test_url.replace("localhost", "host.docker.internal")
-    
+
     if req.provider == "ollama" and not test_url:
         test_url = f"http://{OLLAMA_HOST}"
     elif not test_url:
         from ai.llm_router import PROVIDER_URLS
+
         test_url = PROVIDER_URLS.get(req.provider, "https://api.openai.com/v1")
-    
+
     # Normalize: strip /v1 for Ollama (uses native API), keep for others
     if req.provider == "ollama":
         test_url = test_url.rstrip("/").removesuffix("/v1")
-    
+
     logger.info(
         f"Testing LLM connection: provider={req.provider}, model={req.model}, base_url={test_url}"
     )
@@ -2395,7 +2458,12 @@ def llm_test(req: LLMTestRequest):
                 f"{test_url}/api/chat",
                 json={
                     "model": req.model,
-                    "messages": [{"role": "user", "content": "Say 'Connection successful' in exactly those words."}],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Say 'Connection successful' in exactly those words.",
+                        }
+                    ],
                     "stream": False,
                 },
                 headers={"Content-Type": "application/json"},
@@ -2426,7 +2494,12 @@ def llm_test(req: LLMTestRequest):
                 f"{test_url}/chat/completions",
                 json={
                     "model": req.model,
-                    "messages": [{"role": "user", "content": "Say 'Connection successful' in exactly those words."}],
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Say 'Connection successful' in exactly those words.",
+                        }
+                    ],
                     "max_tokens": 50,
                     "temperature": 0.1,
                 },
@@ -2436,7 +2509,9 @@ def llm_test(req: LLMTestRequest):
 
             if response.status_code == 200:
                 data = response.json()
-                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                content = (
+                    data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                )
                 logger.info(f"LLM test successful: {content[:50]}")
                 return {"status": "ok", "response": content[:100], "error": None}
             else:
@@ -2447,7 +2522,11 @@ def llm_test(req: LLMTestRequest):
                 }
 
     except req_lib.exceptions.ConnectionError:
-        return {"status": "error", "response": None, "error": "Connection refused. Is the server running?"}
+        return {
+            "status": "error",
+            "response": None,
+            "error": "Connection refused. Is the server running?",
+        }
     except req_lib.exceptions.Timeout:
         return {"status": "error", "response": None, "error": "Request timeout"}
     except Exception as e:
@@ -2471,26 +2550,48 @@ def auto_detect_llm():
         base_url = saved.get("base_url", "") or PROVIDER_URLS.get(provider, "")
         model = saved.get("model", "") or PROVIDER_MODELS.get(provider, "")
         try:
-            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            }
             resp = req_lib.post(
                 f"{base_url}/chat/completions",
-                json={"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5},
-                headers=headers, timeout=10
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "max_tokens": 5,
+                },
+                headers=headers,
+                timeout=10,
             )
             if resp.status_code in (200, 400, 401, 403, 429):
-                return {"provider": provider, "model": model, "base_url": base_url, "has_api_key": True}
+                return {
+                    "provider": provider,
+                    "model": model,
+                    "base_url": base_url,
+                    "has_api_key": True,
+                }
         except Exception:
             pass
 
     # 2. Check Ollama
-    for url in ["http://host.docker.internal:11434", "http://localhost:11434", "http://ollama:11434"]:
+    for url in [
+        "http://host.docker.internal:11434",
+        "http://localhost:11434",
+        "http://ollama:11434",
+    ]:
         try:
             resp = req_lib.get(f"{url}/api/tags", timeout=5)
             if resp.status_code == 200:
                 models = resp.json().get("models", [])
                 if models:
                     model_name = models[0].get("name", "llama3.2")
-                    return {"provider": "ollama", "model": model_name, "base_url": f"{url}/v1", "has_api_key": False}
+                    return {
+                        "provider": "ollama",
+                        "model": model_name,
+                        "base_url": f"{url}/v1",
+                        "has_api_key": False,
+                    }
         except Exception:
             continue
 
@@ -4200,6 +4301,7 @@ def _run_batch_docking(job_id: str, request: BatchDockingRequest):
 
     try:
         import tempfile
+
         output_dir = tempfile.mkdtemp(prefix="batch_dock_")
 
         result = batch_dock(
@@ -5282,10 +5384,12 @@ def classroom_list_rubrics():
 # QSAR Modeling Endpoints
 # ============================================================
 
+
 @app.get("/qsar/descriptor-groups")
 def qsar_descriptor_groups():
     """Return available molecular descriptor groups"""
     from qsar import get_descriptor_groups
+
     return get_descriptor_groups()
 
 
@@ -5293,6 +5397,7 @@ def qsar_descriptor_groups():
 def qsar_descriptors(req: Dict):
     """Calculate descriptors for a list of SMILES"""
     from qsar import calculate_descriptors
+
     smiles = req.get("smiles", [])
     groups = req.get("groups")
     return calculate_descriptors(smiles, groups)
@@ -5307,6 +5412,7 @@ async def qsar_upload_dataset(
 ):
     """Upload a CSV file and compute descriptors for the whole dataset"""
     from qsar import process_dataset_csv
+
     content = await file.read()
     result = process_dataset_csv(content, smiles_col, activity_col, groups)
     if "error" in result:
@@ -5318,6 +5424,7 @@ async def qsar_upload_dataset(
 def qsar_train(req: Dict):
     """Start a QSAR model training job (async)"""
     from qsar import start_training_job
+
     X = req.get("X", [])
     y = req.get("y", [])
     feature_names = req.get("feature_names", [])
@@ -5332,8 +5439,15 @@ def qsar_train(req: Dict):
         raise HTTPException(status_code=400, detail="X and y data required")
 
     job_id = start_training_job(
-        X, y, feature_names, model_type, model_name,
-        activity_column, descriptor_groups, cv_folds, model_params
+        X,
+        y,
+        feature_names,
+        model_type,
+        model_name,
+        activity_column,
+        descriptor_groups,
+        cv_folds,
+        model_params,
     )
     return {"job_id": job_id, "status": "pending", "message": "Training started"}
 
@@ -5342,6 +5456,7 @@ def qsar_train(req: Dict):
 def qsar_train_status(job_id: str):
     """Get training job status"""
     from qsar import get_training_status
+
     return get_training_status(job_id)
 
 
@@ -5349,6 +5464,7 @@ def qsar_train_status(job_id: str):
 def qsar_train_results(job_id: str):
     """Get training job results"""
     from qsar import get_training_status
+
     data = get_training_status(job_id)
     return data
 
@@ -5357,6 +5473,7 @@ def qsar_train_results(job_id: str):
 def qsar_predict_single(req: Dict):
     """Predict activity for a single SMILES"""
     from qsar import predict_single as _predict_single
+
     model_id = req.get("model_id", "")
     smiles = req.get("smiles", "")
     if not model_id or not smiles:
@@ -5371,6 +5488,7 @@ def qsar_predict_single(req: Dict):
 def qsar_predict_batch(req: Dict):
     """Predict activity for a batch of SMILES"""
     from qsar import predict_batch as _predict_batch
+
     model_id = req.get("model_id", "")
     smiles_list = req.get("smiles_list", [])
     if not model_id or not smiles_list:
@@ -5382,6 +5500,7 @@ def qsar_predict_batch(req: Dict):
 def qsar_list_models():
     """List all saved QSAR models"""
     from qsar import list_models as _list_models
+
     return {"models": _list_models()}
 
 
@@ -5389,6 +5508,7 @@ def qsar_list_models():
 def qsar_get_model(model_id: str):
     """Get a specific QSAR model's metadata"""
     from qsar import get_model as _get_model
+
     model = _get_model(model_id)
     if not model:
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
@@ -5399,6 +5519,7 @@ def qsar_get_model(model_id: str):
 def qsar_delete_model(model_id: str):
     """Delete a saved QSAR model"""
     from qsar import delete_model as _delete_model
+
     ok = _delete_model(model_id)
     return {"success": ok, "model_id": model_id}
 
@@ -5410,9 +5531,11 @@ def qsar_delete_model(model_id: str):
 # ── In-memory cache keyed by canonical SMILES ────────────────
 _CHEM_CACHE: Dict[str, Any] = {}
 
+
 def _canonical(smiles: str) -> str:
     try:
         from rdkit import Chem
+
         mol = Chem.MolFromSmiles(smiles)
         return Chem.MolToSmiles(mol) if mol else smiles
     except Exception:
@@ -5433,6 +5556,7 @@ def chem_properties(req: ChemSmilesRequest):
     try:
         from rdkit import Chem
         from rdkit.Chem import Descriptors, rdMolDescriptors
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             return {"valid": False, "error": "Invalid SMILES"}
@@ -5464,6 +5588,7 @@ def chem_alerts(req: ChemSmilesRequest):
         return _CHEM_CACHE[cache_key]
     try:
         from rdkit import Chem
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             return {"alerts": [], "error": "Invalid SMILES"}
@@ -5491,7 +5616,14 @@ def chem_alerts(req: ChemSmilesRequest):
             try:
                 patt = Chem.MolFromSmarts(smarts)
                 if patt and mol.HasSubstructMatch(patt):
-                    found.append({"name": name, "type": alert_type, "severity": severity, "smarts": smarts})
+                    found.append(
+                        {
+                            "name": name,
+                            "type": alert_type,
+                            "severity": severity,
+                            "smarts": smarts,
+                        }
+                    )
             except Exception:
                 continue
 
@@ -5511,6 +5643,7 @@ def chem_functional_groups(req: ChemSmilesRequest):
         return _CHEM_CACHE[cache_key]
     try:
         from rdkit import Chem
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             return {"groups": []}
@@ -5521,7 +5654,11 @@ def chem_functional_groups(req: ChemSmilesRequest):
             ("Amide", "[CX3](=O)[NX3]", "bg-yellow-100 text-yellow-700"),
             ("Amine (primary)", "[NX3;H2][CX4]", "bg-blue-100 text-blue-700"),
             ("Amine (secondary)", "[NX3;H1]([CX4])[CX4]", "bg-blue-200 text-blue-800"),
-            ("Amine (tertiary)", "[NX3]([CX4])([CX4])[CX4]", "bg-indigo-100 text-indigo-700"),
+            (
+                "Amine (tertiary)",
+                "[NX3]([CX4])([CX4])[CX4]",
+                "bg-indigo-100 text-indigo-700",
+            ),
             ("Alcohol", "[OX2H][CX4]", "bg-green-100 text-green-700"),
             ("Phenol", "[OX2H]c", "bg-teal-100 text-teal-700"),
             ("Aldehyde", "[CX3H1](=O)", "bg-amber-100 text-amber-700"),
@@ -5545,7 +5682,9 @@ def chem_functional_groups(req: ChemSmilesRequest):
                 if patt:
                     matches = mol.GetSubstructMatches(patt)
                     if matches:
-                        found.append({"name": name, "count": len(matches), "color": color})
+                        found.append(
+                            {"name": name, "count": len(matches), "color": color}
+                        )
             except Exception:
                 continue
 
@@ -5561,19 +5700,23 @@ def chem_sa_score(req: ChemSmilesRequest):
     """Synthetic Accessibility Score (SA Score, 1=easy, 10=hard)."""
     try:
         from rdkit import Chem
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
         try:
             from rdkit.Chem import RDConfig
             import sys as _sys
+
             sa_path = os.path.join(RDConfig.RDContribDir, "SA_Score")
             if sa_path not in _sys.path:
                 _sys.path.append(sa_path)
             import sascorer
+
             score = sascorer.calculateScore(mol)
         except Exception:
             from rdkit.Chem import Descriptors, rdMolDescriptors
+
             mw = Descriptors.MolWt(mol)
             rings = rdMolDescriptors.CalcNumRings(mol)
             stereo = len(Chem.FindMolChiralCenters(mol, includeUnassigned=True))
@@ -5591,12 +5734,15 @@ def chem_scaffold(req: ChemSmilesRequest):
     try:
         from rdkit import Chem
         from rdkit.Chem.Scaffolds import MurckoScaffold
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
         scaffold_mol = MurckoScaffold.GetScaffoldForMol(mol)
         scaffold_smiles = Chem.MolToSmiles(scaffold_mol) if scaffold_mol else ""
-        generic_mol = MurckoScaffold.MakeScaffoldGeneric(scaffold_mol) if scaffold_mol else None
+        generic_mol = (
+            MurckoScaffold.MakeScaffoldGeneric(scaffold_mol) if scaffold_mol else None
+        )
         generic_smiles = Chem.MolToSmiles(generic_mol) if generic_mol else ""
         return {"scaffold": scaffold_smiles, "generic_scaffold": generic_smiles}
     except HTTPException:
@@ -5613,6 +5759,7 @@ def chem_nmr_predict(req: ChemSmilesRequest):
     """
     try:
         from rdkit import Chem
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
@@ -5626,43 +5773,158 @@ def chem_nmr_predict(req: ChemSmilesRequest):
 
             if symbol == "C":
                 if is_aromatic:
-                    peaks.append({"atom": f"C{idx}", "environment": "Aromatic C", "shift_min": 110, "shift_max": 160, "nucleus": "13C"})
+                    peaks.append(
+                        {
+                            "atom": f"C{idx}",
+                            "environment": "Aromatic C",
+                            "shift_min": 110,
+                            "shift_max": 160,
+                            "nucleus": "13C",
+                        }
+                    )
                 elif "O" in neighbors and "N" in neighbors:
-                    peaks.append({"atom": f"C{idx}", "environment": "C-O + C-N", "shift_min": 155, "shift_max": 175, "nucleus": "13C"})
+                    peaks.append(
+                        {
+                            "atom": f"C{idx}",
+                            "environment": "C-O + C-N",
+                            "shift_min": 155,
+                            "shift_max": 175,
+                            "nucleus": "13C",
+                        }
+                    )
                 elif "O" in neighbors:
-                    peaks.append({"atom": f"C{idx}", "environment": "C-O", "shift_min": 50, "shift_max": 85, "nucleus": "13C"})
+                    peaks.append(
+                        {
+                            "atom": f"C{idx}",
+                            "environment": "C-O",
+                            "shift_min": 50,
+                            "shift_max": 85,
+                            "nucleus": "13C",
+                        }
+                    )
                 elif "N" in neighbors:
-                    peaks.append({"atom": f"C{idx}", "environment": "C-N", "shift_min": 30, "shift_max": 60, "nucleus": "13C"})
+                    peaks.append(
+                        {
+                            "atom": f"C{idx}",
+                            "environment": "C-N",
+                            "shift_min": 30,
+                            "shift_max": 60,
+                            "nucleus": "13C",
+                        }
+                    )
                 elif "F" in neighbors or "Cl" in neighbors or "Br" in neighbors:
-                    peaks.append({"atom": f"C{idx}", "environment": "C-halide", "shift_min": 20, "shift_max": 50, "nucleus": "13C"})
+                    peaks.append(
+                        {
+                            "atom": f"C{idx}",
+                            "environment": "C-halide",
+                            "shift_min": 20,
+                            "shift_max": 50,
+                            "nucleus": "13C",
+                        }
+                    )
                 else:
-                    peaks.append({"atom": f"C{idx}", "environment": "Alkyl C", "shift_min": 10, "shift_max": 45, "nucleus": "13C"})
+                    peaks.append(
+                        {
+                            "atom": f"C{idx}",
+                            "environment": "Alkyl C",
+                            "shift_min": 10,
+                            "shift_max": 45,
+                            "nucleus": "13C",
+                        }
+                    )
 
                 h_count = atom.GetTotalNumHs()
                 if h_count > 0:
                     if is_aromatic:
-                        peaks.append({"atom": f"H on C{idx}", "environment": "ArH", "shift_min": 6, "shift_max": 9, "nucleus": "1H"})
+                        peaks.append(
+                            {
+                                "atom": f"H on C{idx}",
+                                "environment": "ArH",
+                                "shift_min": 6,
+                                "shift_max": 9,
+                                "nucleus": "1H",
+                            }
+                        )
                     elif "O" in neighbors:
-                        peaks.append({"atom": f"H on C{idx}", "environment": "H-C-O", "shift_min": 3, "shift_max": 5, "nucleus": "1H"})
+                        peaks.append(
+                            {
+                                "atom": f"H on C{idx}",
+                                "environment": "H-C-O",
+                                "shift_min": 3,
+                                "shift_max": 5,
+                                "nucleus": "1H",
+                            }
+                        )
                     elif "N" in neighbors:
-                        peaks.append({"atom": f"H on C{idx}", "environment": "H-C-N", "shift_min": 2, "shift_max": 4, "nucleus": "1H"})
+                        peaks.append(
+                            {
+                                "atom": f"H on C{idx}",
+                                "environment": "H-C-N",
+                                "shift_min": 2,
+                                "shift_max": 4,
+                                "nucleus": "1H",
+                            }
+                        )
                     else:
-                        peaks.append({"atom": f"H on C{idx}", "environment": "Alkyl H", "shift_min": 0, "shift_max": 3, "nucleus": "1H"})
+                        peaks.append(
+                            {
+                                "atom": f"H on C{idx}",
+                                "environment": "Alkyl H",
+                                "shift_min": 0,
+                                "shift_max": 3,
+                                "nucleus": "1H",
+                            }
+                        )
 
             elif symbol == "O" and atom.GetTotalNumHs() > 0:
                 if is_aromatic or any(n.GetIsAromatic() for n in atom.GetNeighbors()):
-                    peaks.append({"atom": f"OH{idx}", "environment": "Phenol OH", "shift_min": 4, "shift_max": 12, "nucleus": "1H"})
+                    peaks.append(
+                        {
+                            "atom": f"OH{idx}",
+                            "environment": "Phenol OH",
+                            "shift_min": 4,
+                            "shift_max": 12,
+                            "nucleus": "1H",
+                        }
+                    )
                 else:
-                    peaks.append({"atom": f"OH{idx}", "environment": "Alcohol OH", "shift_min": 1, "shift_max": 5, "nucleus": "1H"})
+                    peaks.append(
+                        {
+                            "atom": f"OH{idx}",
+                            "environment": "Alcohol OH",
+                            "shift_min": 1,
+                            "shift_max": 5,
+                            "nucleus": "1H",
+                        }
+                    )
 
             elif symbol == "N" and atom.GetTotalNumHs() > 0:
                 if is_aromatic:
-                    peaks.append({"atom": f"NH{idx}", "environment": "ArNH", "shift_min": 7, "shift_max": 12, "nucleus": "1H"})
+                    peaks.append(
+                        {
+                            "atom": f"NH{idx}",
+                            "environment": "ArNH",
+                            "shift_min": 7,
+                            "shift_max": 12,
+                            "nucleus": "1H",
+                        }
+                    )
                 else:
-                    peaks.append({"atom": f"NH{idx}", "environment": "Amine NH", "shift_min": 1, "shift_max": 4, "nucleus": "1H"})
+                    peaks.append(
+                        {
+                            "atom": f"NH{idx}",
+                            "environment": "Amine NH",
+                            "shift_min": 1,
+                            "shift_max": 4,
+                            "nucleus": "1H",
+                        }
+                    )
 
         peaks = peaks[:30]
-        return {"peaks": peaks, "disclaimer": "Rule-based estimates — not experimental data"}
+        return {
+            "peaks": peaks,
+            "disclaimer": "Rule-based estimates — not experimental data",
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -5678,17 +5940,48 @@ def chem_scaffold_cuts(req: ChemSmilesRequest):
     try:
         from rdkit import Chem
         from rdkit.Chem import rdMolDescriptors
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
 
         CUT_PATTERNS = [
-            ("Amide bond", "[CX3](=O)[NX3]", "C(=O)-N", "High-priority amide disconnection (→ acid + amine)"),
-            ("Ester bond", "[CX3](=O)[OX2][CX4]", "C(=O)-O", "Ester disconnection (→ acid + alcohol)"),
-            ("C-N bond (aryl)", "[c][NX3]", "Ar-N", "Aryl-nitrogen disconnect (Buchwald coupling)"),
-            ("C-O bond (aryl)", "[c][OX2]", "Ar-O", "Aryl ether disconnect (Ullmann coupling)"),
-            ("Sulfonamide", "[SX4](=O)(=O)[NX3]", "S(=O)2-N", "Sulfonamide disconnect (→ sulfonyl chloride + amine)"),
-            ("Urea", "[NX3]C(=O)[NX3]", "N-C(=O)-N", "Urea disconnect (→ isocyanate + amine)"),
+            (
+                "Amide bond",
+                "[CX3](=O)[NX3]",
+                "C(=O)-N",
+                "High-priority amide disconnection (→ acid + amine)",
+            ),
+            (
+                "Ester bond",
+                "[CX3](=O)[OX2][CX4]",
+                "C(=O)-O",
+                "Ester disconnection (→ acid + alcohol)",
+            ),
+            (
+                "C-N bond (aryl)",
+                "[c][NX3]",
+                "Ar-N",
+                "Aryl-nitrogen disconnect (Buchwald coupling)",
+            ),
+            (
+                "C-O bond (aryl)",
+                "[c][OX2]",
+                "Ar-O",
+                "Aryl ether disconnect (Ullmann coupling)",
+            ),
+            (
+                "Sulfonamide",
+                "[SX4](=O)(=O)[NX3]",
+                "S(=O)2-N",
+                "Sulfonamide disconnect (→ sulfonyl chloride + amine)",
+            ),
+            (
+                "Urea",
+                "[NX3]C(=O)[NX3]",
+                "N-C(=O)-N",
+                "Urea disconnect (→ isocyanate + amine)",
+            ),
         ]
 
         cuts = []
@@ -5698,31 +5991,47 @@ def chem_scaffold_cuts(req: ChemSmilesRequest):
                 if patt and mol.HasSubstructMatch(patt):
                     try:
                         from rdkit.Chem import AllChem, FragmentMol
+
                         matches = mol.GetSubstructMatches(patt)
                         match = matches[0]
                         if len(match) >= 2:
                             bond = mol.GetBondBetweenAtoms(match[-2], match[-1])
                             if bond:
                                 from rdkit.Chem import FragmentOnBonds
-                                frags = Chem.FragmentOnBonds(mol, [bond.GetIdx()], addDummies=False)
+
+                                frags = Chem.FragmentOnBonds(
+                                    mol, [bond.GetIdx()], addDummies=False
+                                )
                                 frag_smiles = Chem.MolToSmiles(frags).split(".")
                                 if len(frag_smiles) >= 2:
-                                    cuts.append({
-                                        "bond_type": bond_type,
-                                        "reason": reason,
-                                        "fragment1": frag_smiles[0],
-                                        "fragment2": frag_smiles[1],
-                                    })
+                                    cuts.append(
+                                        {
+                                            "bond_type": bond_type,
+                                            "reason": reason,
+                                            "fragment1": frag_smiles[0],
+                                            "fragment2": frag_smiles[1],
+                                        }
+                                    )
                                     continue
                     except Exception:
                         pass
-                    cuts.append({"bond_type": bond_type, "reason": reason, "fragment1": "", "fragment2": ""})
+                    cuts.append(
+                        {
+                            "bond_type": bond_type,
+                            "reason": reason,
+                            "fragment1": "",
+                            "fragment2": "",
+                        }
+                    )
             except Exception:
                 continue
             if len(cuts) >= 3:
                 break
 
-        return {"cuts": cuts, "disclaimer": "Suggested disconnections for medicinal chemistry exploration"}
+        return {
+            "cuts": cuts,
+            "disclaimer": "Suggested disconnections for medicinal chemistry exploration",
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -5739,8 +6048,14 @@ async def chem_similarity_search(req: Dict[str, Any] = Body(...)):
         raise HTTPException(status_code=400, detail="smiles required")
     try:
         import httpx
-        encoded = smiles.replace("/", "%2F").replace("+", "%2B").replace("#", "%23").replace("@", "%40")
-        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/similarity/smiles/{encoded}/JSON?Threshold={int(threshold*100)}&MaxRecords={max_results}"
+
+        encoded = (
+            smiles.replace("/", "%2F")
+            .replace("+", "%2B")
+            .replace("#", "%23")
+            .replace("@", "%40")
+        )
+        url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/similarity/smiles/{encoded}/JSON?Threshold={int(threshold * 100)}&MaxRecords={max_results}"
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(url)
             if not resp.is_success:
@@ -5750,12 +6065,14 @@ async def chem_similarity_search(req: Dict[str, Any] = Body(...)):
         props_list = data.get("PropertyTable", {}).get("Properties", [])
         results = []
         for p in props_list[:max_results]:
-            results.append({
-                "cid": p.get("CID", 0),
-                "smiles": p.get("IsomericSMILES", p.get("CanonicalSMILES", "")),
-                "name": p.get("IUPACName", f"CID_{p.get('CID', 0)}"),
-                "tanimoto": threshold + (1 - threshold) * 0.5,
-            })
+            results.append(
+                {
+                    "cid": p.get("CID", 0),
+                    "smiles": p.get("IsomericSMILES", p.get("CanonicalSMILES", "")),
+                    "name": p.get("IUPACName", f"CID_{p.get('CID', 0)}"),
+                    "tanimoto": threshold + (1 - threshold) * 0.5,
+                }
+            )
         return {"results": results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -5766,6 +6083,7 @@ def chem_to_smarts(req: ChemSmilesRequest):
     """Convert SMILES to SMARTS via RDKit."""
     try:
         from rdkit import Chem
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
@@ -5783,11 +6101,16 @@ def chem_iupac(req: ChemSmilesRequest):
     try:
         import urllib.request
         from urllib.parse import quote
+
         q = quote(req.smiles)
         url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles/{q}/property/IUPACName/JSON"
         with urllib.request.urlopen(url, timeout=10) as r:
             data = json.loads(r.read())
-        name = data.get("PropertyTable", {}).get("Properties", [{}])[0].get("IUPACName", "")
+        name = (
+            data.get("PropertyTable", {})
+            .get("Properties", [{}])[0]
+            .get("IUPACName", "")
+        )
         return {"iupac": name}
     except Exception:
         return {"iupac": ""}
@@ -5799,6 +6122,7 @@ def chem_inchi(req: ChemSmilesRequest):
     try:
         from rdkit import Chem
         from rdkit.Chem.inchi import MolToInchi, InchiToInchiKey
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
@@ -5821,6 +6145,7 @@ def chem_conformers(req: Dict[str, Any] = Body(...)):
     try:
         from rdkit import Chem
         from rdkit.Chem import AllChem
+
         mol = Chem.MolFromSmiles(smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
@@ -5829,10 +6154,14 @@ def chem_conformers(req: Dict[str, Any] = Body(...)):
         params.randomSeed = 42
         ids = AllChem.EmbedMultipleConfs(mol, numConfs=n_conformers, params=params)
         if not ids:
-            raise HTTPException(status_code=422, detail="Could not generate 3D conformers")
+            raise HTTPException(
+                status_code=422, detail="Could not generate 3D conformers"
+            )
         energies = []
         for cid in ids:
-            ff = AllChem.MMFFGetMoleculeForceField(mol, AllChem.MMFFGetMoleculeProperties(mol), confId=cid)
+            ff = AllChem.MMFFGetMoleculeForceField(
+                mol, AllChem.MMFFGetMoleculeProperties(mol), confId=cid
+            )
             if ff:
                 ff.Minimize()
                 energies.append(round(ff.CalcEnergy(), 3))
@@ -5852,6 +6181,7 @@ def chem_docking_prep(req: ChemSmilesRequest):
     try:
         from rdkit import Chem
         from rdkit.Chem import Descriptors, rdMolDescriptors
+
         mol = Chem.MolFromSmiles(req.smiles)
         if not mol:
             raise HTTPException(status_code=400, detail="Invalid SMILES")
@@ -5879,12 +6209,14 @@ def chem_docking_prep(req: ChemSmilesRequest):
 # ============================================================
 
 from api.ligand_modifier_router import router as ligand_modifier_router
+
 app.include_router(ligand_modifier_router)
 
 
 # ============================================================
 # SPA catch-all - must be LAST route
 # ============================================================
+
 
 @app.get("/{full_path:path}")
 async def spa_catch_all(full_path: str):
