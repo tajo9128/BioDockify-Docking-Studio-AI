@@ -1368,14 +1368,15 @@ def smart_dock(
     pipeline["best_score"] = min([r["vina_score"] for r in pipeline["results"]])
     best_score = pipeline["best_score"]
 
-    # Routing: escalate to GNINA when Vina finds a good binder (score <= threshold)
-    # i.e. use expensive CNN rescoring only where it matters
-    if best_score <= ENERGY_THRESHOLD and gnina_available:
+    # Always run GNINA + RF after Vina when available (GPU or CPU)
+    if gnina_available:
+        gpu_info = check_gpu_cuda()
+        mode = "GPU" if gpu_info["available"] else "CPU"
         logger.info(
-            f"[SmartDock] Good binder ({best_score:.2f} <= {ENERGY_THRESHOLD}) → escalate to GNINA"
+            f"[SmartDock] Vina complete (best: {best_score:.2f}) → escalating to GNINA+RF ({mode})"
         )
         pipeline["routing_decision"] = (
-            f"GNINA_RF (best: {best_score:.2f} <= {ENERGY_THRESHOLD})"
+            f"VINA → GNINA+RF ({mode}, best: {best_score:.2f})"
         )
         pipeline["engine_used"] = "vina_then_gnina"
 
@@ -1397,16 +1398,16 @@ def smart_dock(
             pipeline["results"] = gnina_result.get("results", pipeline["results"])
             pipeline["files"].update(gnina_result.get("files", {}))
 
-            if vina_result["files"].get("log"):
+            if vina_result.get("files", {}).get("log"):
                 pipeline["files"]["vina_log"] = vina_result["files"]["log"]
-            if vina_result["files"].get("docking"):
+            if vina_result.get("files", {}).get("docking"):
                 pipeline["files"]["vina_docking"] = vina_result["files"]["docking"]
 
         pipeline["pipeline_stages"].append(
             {
                 "stage": "docking",
                 "status": "completed",
-                "details": f"GNINA + RF complete - best: {best_score:.2f} kcal/mol",
+                "details": f"Vina → GNINA+RF ({mode}) complete - best: {best_score:.2f} kcal/mol",
             }
         )
 
@@ -1429,12 +1430,12 @@ def smart_dock(
             )
 
     else:
-        # Weak binder or GNINA unavailable — Vina results are sufficient
+        # GNINA unavailable — Vina results only
         logger.info(
-            f"[SmartDock] Weak binder or GNINA unavailable ({best_score:.2f}) → Vina only"
+            f"[SmartDock] Vina complete (best: {best_score:.2f}) → GNINA unavailable, Vina only"
         )
         pipeline["routing_decision"] = (
-            f"VINA_ONLY (best: {best_score:.2f} > {ENERGY_THRESHOLD})"
+            f"VINA_ONLY (best: {best_score:.2f}, GNINA not installed)"
         )
         pipeline["engine_used"] = "vina"
 
