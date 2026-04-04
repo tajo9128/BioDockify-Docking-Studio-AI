@@ -308,8 +308,12 @@ def _mol_to_pdbqt_meeko(mol, is_ligand: bool = True) -> str:
 
 def _mol_to_pdbqt_rdkit(mol, is_ligand: bool = True) -> str:
     """Fallback RDKit PDBQT generation with correct column formatting."""
-    from rdkit import Chem
-    from rdkit.Chem import AllChem
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem
+    except ImportError as e:
+        logger.error(f"[PDBQT] RDKit import failed: {e}")
+        raise ImportError(f"RDKit not available: {e}")
 
     try:
         AllChem.ComputeGasteigerCharges(mol)
