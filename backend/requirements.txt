@@ -22,8 +22,6 @@ vina>=1.2.5
 meeko>=0.5.0
 gemmi>=0.6.4
 openbabel-wheel
-gemmi>=0.6.4
-openbabel-wheel
 
 wheel>=0.46.2
 jaraco.context>=6.1.0

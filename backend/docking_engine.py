@@ -262,18 +262,20 @@ def prepare_protein_from_content(
 
 
 def mol_to_pdbqt(mol, is_ligand: bool = True) -> str:
-    """Convert RDKit mol to PDBQT format using Meeko with Open Babel fallback.
-    Meeko is the gold standard for AutoDock PDBQT preparation.
-    """
+    """Convert RDKit mol to PDBQT with 3-tier fallback: Meeko → Open Babel → RDKit."""
     try:
         return _mol_to_pdbqt_meeko(mol, is_ligand)
     except Exception as e:
-        logger.warning(f"[PDBQT] Meeko failed: {e}. Falling back to RDKit...")
-        return _mol_to_pdbqt_rdkit(mol, is_ligand)
+        logger.warning(f"[PDBQT] Meeko failed: {e}. Trying Open Babel...")
+    try:
+        return _mol_to_pdbqt_openbabel(mol, is_ligand)
+    except Exception as e:
+        logger.warning(f"[PDBQT] Open Babel failed: {e}. Falling back to RDKit...")
+    return _mol_to_pdbqt_rdkit(mol, is_ligand)
 
 
 def _mol_to_pdbqt_meeko(mol, is_ligand: bool = True) -> str:
-    """Meeko-based PDBQT conversion — robust, handles atom types correctly."""
+    """Meeko-based PDBQT conversion — gold standard for AutoDock."""
     from meeko import MoleculePreparation
     from rdkit import Chem
     from rdkit.Chem import AllChem
@@ -298,16 +300,61 @@ def _mol_to_pdbqt_meeko(mol, is_ligand: bool = True) -> str:
         raise ValueError("Meeko produced empty PDBQT")
 
     pdbqt_content = pdbqt_strs[0]
-
-    # Validate before returning
     if not _validate_pdbqt(pdbqt_content):
         raise ValueError("Meeko output failed PDBQT validation")
 
     return pdbqt_content
 
 
+def _mol_to_pdbqt_openbabel(mol, is_ligand: bool = True) -> str:
+    """Open Babel PDBQT conversion — reliable alternative when Meeko fails."""
+    try:
+        from openbabel import openbabel as ob
+    except ImportError:
+        raise ImportError("Open Babel not available")
+
+    obConversion = ob.OBConversion()
+    obConversion.SetInAndOutFormats("sdf", "pdbqt")
+
+    obMol = ob.OBMol()
+    sdf_block = Chem.MolToMolBlock(mol)
+    if not sdf_block:
+        raise ValueError("Cannot generate SDF block from RDKit mol")
+
+    obConversion.ReadString(obMol, sdf_block)
+
+    if is_ligand:
+        obMol.AddHydrogens()
+
+    obMol.ComputeGasteigerCharges()
+
+    pdbqt_content = obConversion.WriteString(obMol)
+    if not pdbqt_content or not pdbqt_content.strip():
+        raise ValueError("Open Babel produced empty PDBQT")
+
+    if not _validate_pdbqt(pdbqt_content):
+        raise ValueError("Open Babel output failed PDBQT validation")
+
+    return pdbqt_content
+
+
 def _mol_to_pdbqt_rdkit(mol, is_ligand: bool = True) -> str:
-    """Fallback RDKit PDBQT generation with correct column formatting."""
+    """Fallback RDKit PDBQT generation with strict AutoDock column alignment.
+    PDBQT format (fixed-width columns):
+    1-6   Record name (ATOM/HETATM)
+    7-11  Atom serial (right-justified, 5 digits)
+    13-16 Atom name (left-justified, 4 chars)
+    18-20 Residue name (right-justified, 3 chars)
+    22    Chain ID (1 char)
+    23-26 Residue sequence (right-justified, 4 digits)
+    31-38 X coordinate (right-justified, 8.3f)
+    39-46 Y coordinate (right-justified, 8.3f)
+    47-54 Z coordinate (right-justified, 8.3f)
+    55-60 Occupancy (right-justified, 6.2f)
+    61-66 B-factor (right-justified, 6.2f)
+    77-78 AutoDock atom type (left-justified, 2 chars) — MUST be valid AD type
+    79-86 Partial charge (right-justified, 8.3f)
+    """
     from rdkit import Chem
     from rdkit.Chem import AllChem
 
@@ -334,13 +381,18 @@ def _mol_to_pdbqt_rdkit(mol, is_ligand: bool = True) -> str:
         for i, atom in enumerate(mol.GetAtoms()):
             pos = positions[i]
             serial = (i + 1) % 99999
-            name = atom.GetSymbol()
+            sym = atom.GetSymbol()
             charge = _gasteiger(atom)
+            ad_type = get_ad4_atom_type(atom.GetAtomicNum())
 
+            # Strict column alignment
             line = (
-                f"HETATM{serial:>5d} {name:<4s} LIG A{(i // 9999) + 1:>4d}    "
+                f"HETATM{serial:>5d} {sym:<4s} LIG A{(i // 9999) + 1:>4d}    "
                 f"{pos[0]:>8.3f}{pos[1]:>8.3f}{pos[2]:>8.3f}"
-                f"{1.00:>6.2f}{0.00:>6.2f}          {name:<2s}{charge:>8.3f}"
+                f"{1.00:>6.2f}{0.00:>6.2f}"
+                f"          "
+                f"{ad_type:<2s}"
+                f"{charge:>8.3f}"
             )
             pdbqt_lines.append(line)
 
@@ -367,15 +419,18 @@ def _mol_to_pdbqt_rdkit(mol, is_ligand: bool = True) -> str:
         for i, atom in enumerate(mol.GetAtoms()):
             pos = positions[i]
             serial = (i + 1) % 99999
-            name = atom.GetSymbol()
+            sym = atom.GetSymbol()
             atomic_num = atom.GetAtomicNum()
             ad_type = get_ad4_atom_type(atomic_num)
             charge = _gasteiger(atom)
 
             line = (
-                f"ATOM  {serial:>5d} {name:<4s} PRO A{(i // 9999) + 1:>4d}    "
+                f"ATOM  {serial:>5d} {sym:<4s} PRO A{(i // 9999) + 1:>4d}    "
                 f"{pos[0]:>8.3f}{pos[1]:>8.3f}{pos[2]:>8.3f}"
-                f"{1.00:>6.2f}{0.00:>6.2f}          {ad_type:<2s}{charge:>8.3f}"
+                f"{1.00:>6.2f}{0.00:>6.2f}"
+                f"          "
+                f"{ad_type:<2s}"
+                f"{charge:>8.3f}"
             )
             pdbqt_lines.append(line)
 
