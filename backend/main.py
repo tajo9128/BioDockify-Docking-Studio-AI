@@ -6212,6 +6212,159 @@ app.include_router(ligand_modifier_router)
 
 
 # ============================================================
+# AI Ligand Generation
+# ============================================================
+
+from rdkit import Chem
+from rdkit.Chem import Descriptors
+
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434/api/generate")
+
+
+@app.post("/api/ai/generate-ligands")
+async def ai_generate_ligands(request: dict):
+    """Generate drug-like SMILES using local LLM with RDKit validation."""
+    query = request.get("prompt", "")
+    n_molecules = min(request.get("count", 10), 20)
+
+    full_prompt = f"""Generate exactly {n_molecules} drug-like small molecule SMILES strings.
+Target: {query}
+
+Rules:
+- Valid SMILES only
+- No metals, no organometallics
+- Molecular weight between 150 and 500
+- Lipinski compliant (MW<500, LogP<5, HBD<5, HBA<10)
+- Diverse scaffolds
+- Output ONLY SMILES, one per line, no numbering, no explanations"""
+
+    try:
+        resp = requests.post(
+            OLLAMA_URL,
+            json={"model": "qwen3:4b", "prompt": full_prompt, "stream": False},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        text = resp.json().get("response", "")
+    except Exception as e:
+        return {"error": f"LLM generation failed: {str(e)}", "molecules": []}
+
+    molecules = []
+    seen = set()
+    for line in text.split("\n"):
+        smi = line.strip().rstrip(".,;:")
+        if not smi or smi in seen:
+            continue
+        mol = Chem.MolFromSmiles(smi)
+        if mol is None:
+            continue
+        # Filter: MW, LogP, no metals
+        mw = Descriptors.MolWt(mol)
+        if mw < 100 or mw > 550:
+            continue
+        logp = Descriptors.MolLogP(mol)
+        if logp > 6:
+            continue
+        has_metal = any(
+            a.GetAtomicNum() in {12, 20, 25, 26, 29, 30} for a in mol.GetAtoms()
+        )
+        if has_metal:
+            continue
+        seen.add(smi)
+        molecules.append(
+            {
+                "smiles": smi,
+                "mw": round(mw, 1),
+                "logp": round(logp, 2),
+                "hbd": Descriptors.NumHDonors(mol),
+                "hba": Descriptors.NumHAcceptors(mol),
+                "rotatable": Descriptors.NumRotatableBonds(mol),
+                "lipinski_pass": mw < 500
+                and logp < 5
+                and Descriptors.NumHDonors(mol) <= 5
+                and Descriptors.NumHAcceptors(mol) <= 10,
+            }
+        )
+        if len(molecules) >= n_molecules:
+            break
+
+    return {"count": len(molecules), "molecules": molecules, "query": query}
+
+
+@app.post("/api/ai/optimize-ligand")
+async def ai_optimize_ligand(request: dict):
+    """Optimize an existing ligand for better properties."""
+    smiles = request.get("smiles", "")
+    goal = request.get("goal", "improve drug-likeness")
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return {"error": "Invalid SMILES"}
+
+    current_props = {
+        "mw": round(Descriptors.MolWt(mol), 1),
+        "logp": round(Descriptors.MolLogP(mol), 2),
+        "hbd": Descriptors.NumHDonors(mol),
+        "hba": Descriptors.NumHAcceptors(mol),
+    }
+
+    full_prompt = f"""Given this molecule: {smiles}
+Current properties: MW={current_props["mw"]}, LogP={current_props["logp"]}, HBD={current_props["hbd"]}, HBA={current_props["hba"]}
+
+Goal: {goal}
+
+Generate 5 improved SMILES. Rules:
+- Valid SMILES only
+- Keep core scaffold similar
+- MW 150-500, LogP < 5
+- Output ONLY SMILES, one per line"""
+
+    try:
+        resp = requests.post(
+            OLLAMA_URL,
+            json={"model": "qwen3:4b", "prompt": full_prompt, "stream": False},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        text = resp.json().get("response", "")
+    except Exception as e:
+        return {"error": f"LLM optimization failed: {str(e)}", "molecules": []}
+
+    molecules = []
+    seen = {smiles}
+    for line in text.split("\n"):
+        smi = line.strip().rstrip(".,;:")
+        if not smi or smi in seen:
+            continue
+        m = Chem.MolFromSmiles(smi)
+        if m is None:
+            continue
+        mw = Descriptors.MolWt(m)
+        if mw < 100 or mw > 550:
+            continue
+        seen.add(smi)
+        molecules.append(
+            {
+                "smiles": smi,
+                "mw": round(mw, 1),
+                "logp": round(Descriptors.MolLogP(m), 2),
+                "hbd": Descriptors.NumHDonors(m),
+                "hba": Descriptors.NumHAcceptors(m),
+                "rotatable": Descriptors.NumRotatableBonds(m),
+            }
+        )
+        if len(molecules) >= 5:
+            break
+
+    return {
+        "count": len(molecules),
+        "molecules": molecules,
+        "original": smiles,
+        "goal": goal,
+    }
+
+
+# ============================================================
 # SPA catch-all - must be LAST route
 # ============================================================
 

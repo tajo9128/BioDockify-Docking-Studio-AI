@@ -135,6 +135,12 @@ export function LigandDesigner() {
     try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]') } catch { return [] }
   })
   const [similarityLoading, setSimilarityLoading] = useState(false)
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiOptimizeGoal, setAiOptimizeGoal] = useState('improve drug-likeness')
+  const [aiMolecules, setAiMolecules] = useState<any[]>([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState('')
+  const [showAiPanel, setShowAiPanel] = useState(false)
 
   // ─── Caching helpers ──────────────────────────────────────────────────────
   const getCached = (smi: string) => smilesCache.current[smi] || null
@@ -435,6 +441,39 @@ export function LigandDesigner() {
   const sendToADMET = () => { sessionStorage.setItem('admet_smiles', smiles); navigate('/admet') }
   const sendToDocking = () => { sessionStorage.setItem('ligand_smiles', smiles); navigate('/docking') }
 
+  // ─── AI Ligand Generation ─────────────────────────────────────────────────
+  const aiGenerate = async () => {
+    if (!aiPrompt.trim()) return
+    setAiLoading(true); setAiError(''); setAiMolecules([])
+    try {
+      const res = await fetch('/api/ai/generate-ligands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiPrompt, count: 10 }),
+      })
+      const data = await res.json()
+      if (data.error) setAiError(data.error)
+      else setAiMolecules(data.molecules || [])
+    } catch (e: any) { setAiError(e.message || 'Generation failed') }
+    setAiLoading(false)
+  }
+
+  const aiOptimize = async () => {
+    if (!smiles) return
+    setAiLoading(true); setAiError(''); setAiMolecules([])
+    try {
+      const res = await fetch('/api/ai/optimize-ligand', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smiles, goal: aiOptimizeGoal }),
+      })
+      const data = await res.json()
+      if (data.error) setAiError(data.error)
+      else setAiMolecules(data.molecules || [])
+    } catch (e: any) { setAiError(e.message || 'Optimization failed') }
+    setAiLoading(false)
+  }
+
   // ─── Template filter ──────────────────────────────────────────────────────
   const lc = templateFilter.toLowerCase()
   const filteredHeterocycles = HETEROCYCLES.filter(t => t.name.toLowerCase().includes(lc))
@@ -489,6 +528,8 @@ export function LigandDesigner() {
         <button onClick={sendToDocking} disabled={!smiles} className="px-2 py-1 text-xs rounded bg-cyan-700 hover:bg-cyan-600 text-white disabled:opacity-40">→ Dock</button>
         <button onClick={sendToQSAR} disabled={!smiles} className="px-2 py-1 text-xs rounded bg-violet-700 hover:bg-violet-600 text-white disabled:opacity-40">→ QSAR</button>
         <button onClick={sendToADMET} disabled={!smiles} className="px-2 py-1 text-xs rounded bg-green-700 hover:bg-green-600 text-white disabled:opacity-40">→ ADMET</button>
+        <div className="w-px h-4 bg-slate-600 mx-1" />
+        <button onClick={() => setShowAiPanel(v => !v)} className={`px-2 py-1 text-xs rounded transition-colors ${showAiPanel ? 'bg-purple-600 text-white' : 'border border-slate-600 text-gray-300 hover:bg-slate-700'}`}>🧠 AI Generate</button>
         <div className="flex-1" />
         {ketcherReady && <span className="text-xs text-green-400">● Editor Ready</span>}
         {!ketcherReady && <span className="text-xs text-amber-400">○ Loading Editor…</span>}
@@ -645,6 +686,91 @@ export function LigandDesigner() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* AI Ligand Generation Panel */}
+          {showAiPanel && (
+            <div className="p-3 border-t border-gray-200">
+              <div className="text-xs font-semibold text-purple-700 mb-2">🧠 AI Ligand Generation</div>
+
+              {/* Generate new molecules */}
+              <div className="mb-3">
+                <label className="text-xs font-medium text-gray-600 mb-1 block">Generate molecules for target</label>
+                <input
+                  type="text"
+                  value={aiPrompt}
+                  onChange={e => setAiPrompt(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && aiGenerate()}
+                  placeholder="e.g. EGFR kinase inhibitor, GPCR agonist"
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-gray-50 focus:ring-1 focus:ring-purple-400 outline-none mb-1"
+                />
+                <button
+                  onClick={aiGenerate}
+                  disabled={aiLoading || !aiPrompt.trim()}
+                  className="w-full px-2 py-1 text-xs bg-purple-600 hover:bg-purple-700 text-white rounded disabled:opacity-50 font-medium"
+                >
+                  {aiLoading ? 'Generating…' : 'Generate Molecules'}
+                </button>
+              </div>
+
+              {/* Optimize current molecule */}
+              {smiles && (
+                <div className="mb-3">
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">Optimize current molecule</label>
+                  <select
+                    value={aiOptimizeGoal}
+                    onChange={e => setAiOptimizeGoal(e.target.value)}
+                    className="w-full px-2 py-1 text-xs border border-gray-300 rounded bg-gray-50 outline-none mb-1"
+                  >
+                    <option value="improve drug-likeness">Improve drug-likeness</option>
+                    <option value="reduce LogP">Reduce LogP</option>
+                    <option value="reduce molecular weight">Reduce MW</option>
+                    <option value="improve solubility">Improve solubility</option>
+                    <option value="add metabolic stability">Add metabolic stability</option>
+                  </select>
+                  <button
+                    onClick={aiOptimize}
+                    disabled={aiLoading || !smiles}
+                    className="w-full px-2 py-1 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded disabled:opacity-50 font-medium"
+                  >
+                    {aiLoading ? 'Optimizing…' : 'Optimize Molecule'}
+                  </button>
+                </div>
+              )}
+
+              {/* Results */}
+              {aiError && <p className="text-xs text-red-500 mb-2">{aiError}</p>}
+              {aiMolecules.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-gray-500">{aiMolecules.length} molecules generated</p>
+                  {aiMolecules.map((m: any, i: number) => (
+                    <div key={i} className={`text-xs p-2 rounded border ${m.lipinski_pass ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
+                      <div className="font-mono text-gray-700 truncate" title={m.smiles}>{m.smiles}</div>
+                      <div className="flex gap-2 mt-1 text-gray-500">
+                        <span>MW:{m.mw}</span>
+                        <span>LogP:{m.logp}</span>
+                        <span>HBD:{m.hbd}</span>
+                        <span>HBA:{m.hba}</span>
+                      </div>
+                      <div className="flex gap-1 mt-1">
+                        <button
+                          onClick={() => loadIntoKetcher(m.smiles, `AI_${i + 1}`)}
+                          className="flex-1 px-1 py-0.5 text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 rounded"
+                        >
+                          Load
+                        </button>
+                        <button
+                          onClick={() => { sessionStorage.setItem('ligand_smiles', m.smiles); navigate('/docking') }}
+                          className="flex-1 px-1 py-0.5 text-xs bg-cyan-100 hover:bg-cyan-200 text-cyan-700 rounded"
+                        >
+                          Dock
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
