@@ -6,11 +6,10 @@ BioDockify CrewAI Agents - Drug Discovery Team
 from crewai import Agent
 from crew.tools.docking_tools import run_docking, batch_docking
 from crew.tools.chemistry_tools import calculate_properties, smiles_to_3d, convert_format, optimize_molecule
-from crew.tools.pharmacophore_tools import generate_pharmacophore, screen_library
 from crew.tools.admet_tools import predict_admet, filter_admet
 from crew.tools.analysis_tools import analyze_interactions, rank_ligands, consensus_score, export_top_hits
-from crew.tools.data_tools import fetch_compound, search_compounds, fetch_protein
 from crew.tools.notification_tools import send_notification
+from crew.tools.md_tools import run_md_simulation, analyze_md_trajectory, interpret_rmsd, suggest_md_parameters
 
 
 def _get_llm(llm=None):
@@ -89,26 +88,6 @@ You provide detailed molecular property analysis including MW, LogP, TPSA, HBD, 
     )
 
 
-def create_pharmacophore_agent(llm=None) -> Agent:
-    """Pharmacophore Expert - Generate and screen pharmacophores"""
-    return Agent(
-        role="Pharmacophore Modeling Expert",
-        goal="Generate pharmacophore models from protein-ligand complexes and screen compound libraries",
-        backstory="""You are an expert in structure-based drug design and pharmacophore modeling.
-You identify key interaction features including H-bond donors/acceptors, hydrophobic regions,
-aromatic rings, and charged groups. You can generate pharmacophore models from:
-1. Protein-ligand complexes (structure-based)
-2. Active ligand series (ligand-based)
-3. Known binding site residues (knowledge-based)
-You efficiently screen compound libraries against pharmacophore models to find novel hits.""",
-        tools=[generate_pharmacophore, screen_library, fetch_protein],
-        llm=_get_llm(llm),
-        verbose=True,
-        allow_delegation=True,
-        max_iter=25,
-        reasoning=True,
-    )
-
 
 def create_admet_agent(llm=None) -> Agent:
     """ADMET Predictor - Absorption, Distribution, Metabolism, Excretion, Toxicity"""
@@ -155,23 +134,27 @@ You always provide actionable insights and next-step recommendations.""",
     )
 
 
-def create_qsar_agent(llm=None) -> Agent:
-    """QSAR Modeling Expert - Build predictive models"""
+
+def create_md_agent(llm=None) -> Agent:
+    """Agent MD - Molecular Dynamics Specialist"""
     return Agent(
-        role="QSAR Modeling Specialist",
-        goal="Build QSAR models and predict biological activity using molecular descriptors",
-        backstory="""You are an expert in quantitative structure-activity relationship (QSAR) modeling.
-You calculate molecular descriptors (2D, 3D, fingerprints) and build predictive models using:
-- Random Forest, SVM, Gradient Boosting
-- Cross-validation with R², RMSE, MAE metrics
-- Feature importance analysis
-- Model interpretability and applicability domain
-You always validate models rigorously and provide confidence intervals for predictions.""",
-        tools=[calculate_properties, predict_admet],
+        role="Molecular Dynamics Specialist",
+        goal="Plan, run, and interpret molecular dynamics simulations to validate binding poses and assess complex stability",
+        backstory="""You are an expert in molecular dynamics simulations for drug discovery.
+You use OpenMM to simulate protein-ligand complexes and interpret trajectory data.
+Your expertise:
+- Selecting optimal simulation parameters per protein family (kinase, GPCR, protease, enzyme)
+- Assessing binding pose stability through RMSD analysis
+- Identifying key dynamic interactions (H-bonds, hydrophobic contacts over time)
+- Diagnosing unstable simulations and suggesting fixes (equilibration, protonation, restraints)
+- Distinguishing induced-fit binding from pose collapse
+You always interpret RMSD < 2.0 Å as stable, 2-3 Å as borderline, and > 3 Å as unstable.
+You proactively flag when a docking pose should be re-evaluated after MD instability.""",
+        tools=[run_md_simulation, analyze_md_trajectory, interpret_rmsd, suggest_md_parameters],
         llm=_get_llm(llm),
         verbose=True,
         allow_delegation=True,
-        max_iter=30,
+        max_iter=20,
         reasoning=True,
     )
 

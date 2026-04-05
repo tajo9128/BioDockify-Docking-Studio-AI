@@ -1,65 +1,56 @@
 """
 BioDockify CrewAI Crews - Pre-built workflows for drug discovery
-One master brain with specialized teams for different tasks.
+Agents: Docking, Chemistry, ADMET, Analysis, MD, Orchestrator
 """
 
-from crewai import Crew, Process
+from crewai import Crew, Process, Task
 from crew.agents import (
     create_docking_agent,
     create_chemistry_agent,
-    create_pharmacophore_agent,
     create_admet_agent,
     create_analysis_agent,
-    create_qsar_agent,
+    create_md_agent,
     create_orchestrator_agent,
 )
-from crewai import Task
 
 
 def create_virtual_screening_crew(llm=None) -> Crew:
     """
     Virtual Screening Crew - Screen compound libraries against a target protein.
-    
-    Pipeline: Prepare protein → Generate pharmacophore → Screen library → Dock hits → Analyze
+    Pipeline: Dock compounds → Analyze → ADMET filter → Report
     """
     docking_agent = create_docking_agent(llm)
-    pharmacophore_agent = create_pharmacophore_agent(llm)
     analysis_agent = create_analysis_agent(llm)
     admet_agent = create_admet_agent(llm)
-
-    prepare_task = Task(
-        description="Prepare the protein receptor structure for docking. Clean the structure, add hydrogens, and determine the binding site.",
-        expected_output="Prepared protein PDB content ready for docking",
-        agent=pharmacophore_agent,
-    )
-
-    pharmacophore_task = Task(
-        description="Generate a pharmacophore model from the binding site to identify key interaction features.",
-        expected_output="Pharmacophore model JSON with feature definitions (H-bond donors/acceptors, hydrophobic, aromatic)",
-        agent=pharmacophore_agent,
-    )
+    orchestrator = create_orchestrator_agent(llm)
 
     dock_task = Task(
-        description="Run molecular docking for the top hits from pharmacophore screening. Use Vina for initial screening and GNINA + RF-Score for validation of best hits.",
+        description="Run molecular docking for all compounds against the target receptor. Use Vina for initial screening and GNINA + RF-Score for best hits.",
         expected_output="Docking results with binding energies for all screened compounds",
         agent=docking_agent,
     )
 
     analyze_task = Task(
-        description="Analyze the docking results, rank compounds using consensus scoring, and filter by ADMET properties. Export top hits.",
-        expected_output="Ranked list of compounds with consensus scores and ADMET assessment",
+        description="Analyze docking results, rank compounds using consensus scoring. Identify top 10% by binding energy.",
+        expected_output="Ranked list of compounds with consensus scores",
         agent=analysis_agent,
     )
 
     admet_task = Task(
-        description="Run full ADMET prediction on the top-ranked compounds and provide drug-likeness assessment.",
-        expected_output="ADMET prediction report for top compounds with pass/fail for each property",
+        description="Run ADMET prediction on top-ranked compounds. Filter by Lipinski Rule of 5 and flag hERG/hepatotox risks.",
+        expected_output="ADMET assessment with drug-likeness pass/fail for each compound",
         agent=admet_agent,
     )
 
+    report_task = Task(
+        description="Synthesize docking scores and ADMET results into a final hit list. Recommend top 3-5 candidates with rationale.",
+        expected_output="Final hit list with scores, ADMET summary, and next-step recommendations",
+        agent=orchestrator,
+    )
+
     return Crew(
-        agents=[pharmacophore_agent, docking_agent, analysis_agent, admet_agent],
-        tasks=[prepare_task, pharmacophore_task, dock_task, analyze_task, admet_task],
+        agents=[docking_agent, analysis_agent, admet_agent, orchestrator],
+        tasks=[dock_task, analyze_task, admet_task, report_task],
         process=Process.sequential,
         verbose=True,
         memory=True,
@@ -212,57 +203,103 @@ def create_docking_analysis_crew(llm=None) -> Crew:
 def create_drug_discovery_crew(llm=None) -> Crew:
     """
     Master Drug Discovery Crew - Full pipeline from target to lead.
-    
-    Pipeline: Protein prep → Virtual screening → Hit validation → ADMET → Lead selection
+    Pipeline: Dock → Analyze → ADMET → MD validation → Lead selection
     """
     orchestrator = create_orchestrator_agent(llm)
     docking_agent = create_docking_agent(llm)
     chemistry_agent = create_chemistry_agent(llm)
-    pharmacophore_agent = create_pharmacophore_agent(llm)
     admet_agent = create_admet_agent(llm)
     analysis_agent = create_analysis_agent(llm)
+    md_agent = create_md_agent(llm)
 
-    screen_task = Task(
-        description="Perform virtual screening: generate pharmacophore from target, screen compound library, identify top hits.",
-        expected_output="List of top hits from virtual screening with pharmacophore match scores",
-        agent=pharmacophore_agent,
-    )
-
-    validate_task = Task(
-        description="Validate hits through molecular docking. Use Vina for initial screening, GNINA + RF-Score for best hits.",
-        expected_output="Validated hits with docking scores and binding poses",
+    dock_task = Task(
+        description="Dock the compound library against the target receptor. Use Vina for screening, GNINA + RF-Score for top hits.",
+        expected_output="Ranked docking results with binding energies and poses",
         agent=docking_agent,
-        context=[screen_task],
     )
 
     analyze_task = Task(
-        description="Analyze protein-ligand interactions for validated hits. Rank using consensus scoring.",
+        description="Analyze protein-ligand interactions for top docking hits. Rank using consensus scoring.",
         expected_output="Interaction analysis and ranked hit list",
         agent=analysis_agent,
-        context=[validate_task],
+        context=[dock_task],
     )
 
     admet_task = Task(
-        description="Predict ADMET properties for top-ranked hits. Filter by drug-likeness rules (Lipinski, Veber, Egan).",
+        description="Predict ADMET properties for top-ranked hits. Filter by Lipinski, Veber, Egan rules.",
         expected_output="ADMET assessment with drug-likeness pass/fail for each compound",
         agent=admet_agent,
         context=[analyze_task],
     )
 
-    final_task = Task(
-        description="Synthesize all results into a comprehensive lead selection report. Recommend top 3-5 candidates with detailed rationale for each.",
-        expected_output="Final lead selection report with top candidates and next-step recommendations",
-        agent=orchestrator,
+    md_task = Task(
+        description="Run MD simulation on the top candidate to validate binding pose stability. Interpret RMSD and recommend next steps.",
+        expected_output="MD stability report with RMSD analysis and pose validation",
+        agent=md_agent,
         context=[admet_task],
     )
 
+    final_task = Task(
+        description="Synthesize all results — docking, ADMET, MD — into a comprehensive lead selection report. Recommend top 3 candidates with rationale.",
+        expected_output="Final lead selection report with top candidates and next-step recommendations",
+        agent=orchestrator,
+        context=[md_task],
+    )
+
     return Crew(
-        agents=[pharmacophore_agent, docking_agent, analysis_agent, admet_agent, orchestrator],
-        tasks=[screen_task, validate_task, analyze_task, admet_task, final_task],
+        agents=[docking_agent, analysis_agent, admet_agent, md_agent, chemistry_agent, orchestrator],
+        tasks=[dock_task, analyze_task, admet_task, md_task, final_task],
         process=Process.sequential,
         verbose=True,
         memory=True,
         max_rpm=30,
         share_crew=True,
         planning=True,
+    )
+
+
+def create_md_simulation_crew(llm=None) -> Crew:
+    """
+    MD Simulation Crew - Validate docking pose stability via molecular dynamics.
+    Pipeline: Suggest params → Run MD → Interpret RMSD → Report
+    """
+    md_agent = create_md_agent(llm)
+    analysis_agent = create_analysis_agent(llm)
+    orchestrator = create_orchestrator_agent(llm)
+
+    params_task = Task(
+        description="Suggest optimal MD simulation parameters for the target protein family. Consider simulation length, temperature, and solvent model.",
+        expected_output="Recommended MD parameters with scientific rationale",
+        agent=md_agent,
+    )
+
+    run_task = Task(
+        description="Run the MD simulation using the recommended parameters. Monitor for early instability and report trajectory status.",
+        expected_output="MD trajectory data with RMSD time series and energy statistics",
+        agent=md_agent,
+        context=[params_task],
+    )
+
+    interpret_task = Task(
+        description="Interpret the MD trajectory: assess RMSD stability, identify key binding interactions over time, flag any pose collapse.",
+        expected_output="Stability assessment with RMSD interpretation and key dynamic interactions",
+        agent=md_agent,
+        context=[run_task],
+    )
+
+    report_task = Task(
+        description="Generate a final MD report: stability verdict, key interactions, limitations, and concrete next-step recommendations.",
+        expected_output="Comprehensive MD report with stability verdict and recommendations",
+        agent=orchestrator,
+        context=[interpret_task],
+    )
+
+    return Crew(
+        agents=[md_agent, analysis_agent, orchestrator],
+        tasks=[params_task, run_task, interpret_task, report_task],
+        process=Process.sequential,
+        verbose=True,
+        memory=True,
+        max_rpm=30,
+        share_crew=True,
     )

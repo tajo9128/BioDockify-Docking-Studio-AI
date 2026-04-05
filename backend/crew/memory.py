@@ -1,24 +1,63 @@
 """
 CrewAI Experiment Memory - ChromaDB-backed storage for experiment tracking,
 failure pattern recognition, and parameter tuning suggestions.
+ChromaDB enables semantic similarity search over job history.
+Falls back to JSON if ChromaDB is unavailable.
 """
 
 import json
 import logging
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
+try:
+    import chromadb
+    from chromadb.config import Settings
+    HAS_CHROMA = True
+except ImportError:
+    HAS_CHROMA = False
+    logger.warning("chromadb not installed — using JSON fallback for experiment memory")
+
 
 class ExperimentMemory:
-    """Stores experiment metadata, results, and validation notes for learning."""
+    """
+    Stores experiment metadata, results, and validation notes for learning.
+    Uses ChromaDB for persistent, semantically-searchable job history.
+    Falls back to JSON if ChromaDB is unavailable.
+    """
 
     def __init__(self, persist_dir: str = "./data/crewai_memory"):
         self.persist_dir = Path(persist_dir)
         self.persist_dir.mkdir(parents=True, exist_ok=True)
         self._experiments: Dict[str, Dict[str, Any]] = {}
+        self._chroma_client = None
+        self._collection = None
+        self._init_chroma()
         self._load()
+
+    def _init_chroma(self):
+        """Initialize ChromaDB persistent client."""
+        if not HAS_CHROMA:
+            return
+        try:
+            chroma_path = str(self.persist_dir / "chromadb")
+            self._chroma_client = chromadb.PersistentClient(
+                path=chroma_path,
+                settings=Settings(anonymized_telemetry=False),
+            )
+            self._collection = self._chroma_client.get_or_create_collection(
+                name="job_history",
+                metadata={"hnsw:space": "cosine"},
+            )
+            logger.info(f"ChromaDB initialized at {chroma_path} — {self._collection.count()} jobs in history")
+        except Exception as e:
+            logger.warning(f"ChromaDB init failed ({e}) — using JSON fallback")
+            self._chroma_client = None
+            self._collection = None
 
     def _load(self):
         exp_file = self.persist_dir / "experiments.json"
@@ -37,24 +76,86 @@ class ExperimentMemory:
         except Exception as e:
             logger.warning(f"Failed to save experiment memory: {e}")
 
+    def _chroma_doc(self, exp_id: str, meta: Dict, result: Dict) -> str:
+        """Build a natural-language document string for ChromaDB embedding."""
+        scaffold = meta.get("scaffold", meta.get("smiles", "unknown"))
+        target = meta.get("target", "unknown")
+        exp_type = meta.get("type", "experiment")
+        status = result.get("status", "unknown")
+        score = result.get("best_score", result.get("binding_energy", result.get("energy", "")))
+        ts = result.get("timestamp", datetime.now().isoformat())[:10]
+        return (
+            f"{exp_type} experiment on {ts}: ligand={scaffold}, target={target}, "
+            f"status={status}, score={score}. "
+            f"Notes: {' '.join(result.get('validation_notes', []))}"
+        )
+
     def store(self, exp_id: str, meta: Dict[str, Any], result: Dict[str, Any]):
-        """Store experiment result."""
-        self._experiments[exp_id] = {
+        """Store experiment result in JSON + ChromaDB."""
+        entry = {
             "meta": meta,
             "result": result,
             "status": result.get("status", "unknown"),
             "confidence": result.get("confidence", 0.0),
             "validation_notes": result.get("validation_notes", []),
-            "timestamp": result.get("timestamp", ""),
+            "timestamp": result.get("timestamp", datetime.now().isoformat()),
         }
+        self._experiments[exp_id] = entry
         self._save()
+
+        # Index into ChromaDB for semantic search
+        if self._collection is not None:
+            try:
+                doc = self._chroma_doc(exp_id, meta, result)
+                chroma_meta = {
+                    "exp_id": exp_id,
+                    "type": str(meta.get("type", "experiment")),
+                    "target": str(meta.get("target", "")),
+                    "scaffold": str(meta.get("scaffold", meta.get("smiles", ""))),
+                    "status": str(entry["status"]),
+                    "timestamp": str(entry["timestamp"])[:19],
+                }
+                self._collection.upsert(
+                    ids=[exp_id],
+                    documents=[doc],
+                    metadatas=[chroma_meta],
+                )
+            except Exception as e:
+                logger.warning(f"ChromaDB store failed for {exp_id}: {e}")
 
     def get(self, exp_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve experiment by ID."""
         return self._experiments.get(exp_id)
 
     def query_similar(self, query: str, n: int = 5) -> List[Dict[str, Any]]:
-        """Find similar experiments by scaffold/target keywords."""
+        """
+        Find similar experiments by semantic similarity (ChromaDB) or keyword fallback.
+        """
+        # ChromaDB semantic search
+        if self._collection is not None and self._collection.count() > 0:
+            try:
+                results = self._collection.query(
+                    query_texts=[query],
+                    n_results=min(n, self._collection.count()),
+                )
+                ids = results.get("ids", [[]])[0]
+                docs = results.get("documents", [[]])[0]
+                metas = results.get("metadatas", [[]])[0]
+                distances = results.get("distances", [[]])[0]
+                out = []
+                for eid, doc, m, dist in zip(ids, docs, metas, distances):
+                    exp = self._experiments.get(eid, {})
+                    out.append({
+                        "exp_id": eid,
+                        "similarity": round(1.0 - dist, 4),
+                        "document": doc,
+                        **exp,
+                    })
+                return out
+            except Exception as e:
+                logger.warning(f"ChromaDB query failed: {e} — falling back to keyword search")
+
+        # Keyword fallback
         query_lower = query.lower()
         scored = []
         for exp_id, exp in self._experiments.items():
@@ -65,6 +166,32 @@ class ExperimentMemory:
                 scored.append((score, exp_id, exp))
         scored.sort(reverse=True)
         return [{"exp_id": eid, **exp} for _, eid, exp in scored[:n]]
+
+    def get_job_history(self, job_type: str = None, n: int = 20) -> List[Dict[str, Any]]:
+        """Return recent job history, optionally filtered by type (docking/md/qsar/admet)."""
+        exps = list(self._experiments.items())
+        exps.sort(key=lambda x: x[1].get("timestamp", ""), reverse=True)
+        results = []
+        for exp_id, exp in exps:
+            if job_type and exp.get("meta", {}).get("type", "") != job_type:
+                continue
+            results.append({"exp_id": exp_id, **exp})
+            if len(results) >= n:
+                break
+        return results
+
+    def chroma_stats(self) -> Dict[str, Any]:
+        """Return ChromaDB collection stats."""
+        if self._collection is not None:
+            try:
+                return {
+                    "backend": "chromadb",
+                    "total_indexed": self._collection.count(),
+                    "persist_dir": str(self.persist_dir / "chromadb"),
+                }
+            except Exception:
+                pass
+        return {"backend": "json_fallback", "total_indexed": len(self._experiments)}
 
     def get_failure_patterns(self, tool_name: str = None) -> List[Dict[str, Any]]:
         """Identify common failure patterns."""

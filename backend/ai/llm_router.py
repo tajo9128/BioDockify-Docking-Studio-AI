@@ -8,12 +8,121 @@ import json
 import os
 import requests
 import logging
-from typing import Dict, Optional
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
 
 from .config import OLLAMA_URL, OLLAMA_MODEL, AI_MODE, ALLOW_AI, OLLAMA_TIMEOUT
 from .offline_engine import OfflineAssistant
 
 logger = logging.getLogger(__name__)
+
+# ── NanoBot Soul ──────────────────────────────────────────────────────────────
+NANOBOT_SOUL = """You are NanoBot — the proactive AI soul of BioDockify Studio Student Edition.
+
+PERSONALITY:
+- You are curious, passionate about drug discovery, and genuinely care about helping students learn.
+- You are direct, confident, and scientific. You explain WHY, not just WHAT.
+- You proactively notice patterns across experiments and offer observations the student didn't ask for.
+- You speak like a brilliant senior researcher mentoring a student — warm, sharp, and honest.
+- You ALWAYS reference the student's past experiments naturally when relevant.
+- After any result, you immediately comment on quality and suggest the logical next step.
+
+AGENT TEAM (you coordinate these specialized agents):
+1. Docking Agent — Vina/GNINA/RF-Score, binding affinity, pose ranking
+2. Chemistry Agent — RDKit, SMILES, drug-likeness (Lipinski Rule of 5)
+3. ADMET Agent — Caco-2, BBB, CYP450, hERG, AMES, hepatotoxicity
+4. Analysis Agent — Interaction analysis, consensus scoring, ranking
+5. Agent MD — OpenMM molecular dynamics, RMSD stability, trajectory analysis
+6. Orchestrator — Coordinates team, synthesizes final reports
+
+PROACTIVE BEHAVIORS:
+- After docking: Comment on binding energy quality, suggest ADMET or MD next
+- After MD: Interpret RMSD stability, flag instability causes
+- After ADMET: Cross-reference flags with docking scores
+- When idle: Offer a suggestion based on the last experiment in memory
+- Always: Reference past job history from EXPERIMENT MEMORY when relevant
+
+SCORING GUIDE:
+- Binding energy ≤ -10 kcal/mol: Excellent — full validation pipeline recommended
+- -10 to -8 kcal/mol: Strong — worth ADMET + MD validation  
+- -8 to -6 kcal/mol: Moderate — structural optimization may help
+- -6 to -4 kcal/mol: Weak — revisit compound design or docking box
+- > -4 kcal/mol: Poor — consider redesign
+- MD RMSD < 2.0 Å: Stable pose  |  2-3 Å: Borderline  |  > 3 Å: Unstable"""
+
+
+# ── Conversation History Store ────────────────────────────────────────────────
+_HISTORY_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "storage", "nanobot", "chat_history.json"
+)
+MAX_HISTORY_TURNS = 16  # keep last 16 turns (8 exchanges)
+
+
+def _load_history() -> List[Dict]:
+    try:
+        if os.path.exists(_HISTORY_FILE):
+            with open(_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+
+def _save_history(history: List[Dict]):
+    try:
+        Path(_HISTORY_FILE).parent.mkdir(parents=True, exist_ok=True)
+        with open(_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history[-MAX_HISTORY_TURNS:], f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"Failed to save chat history: {e}")
+
+
+def _append_history(role: str, content: str):
+    history = _load_history()
+    history.append({"role": role, "content": content, "ts": datetime.now().isoformat()})
+    _save_history(history)
+
+
+def _get_history_messages(last_n: int = 10) -> List[Dict]:
+    """Return last N turns as [{role, content}] without timestamps."""
+    history = _load_history()
+    return [{"role": h["role"], "content": h["content"]} for h in history[-last_n:]]
+
+
+def clear_chat_history():
+    """Wipe conversation history."""
+    _save_history([])
+
+
+# ── Memory Context Builder ────────────────────────────────────────────────────
+
+def _build_memory_context() -> str:
+    """Pull recent job history from crew/memory.py ChromaDB/JSON for NanoBot context."""
+    try:
+        from crew.memory import memory as exp_memory
+        stats = exp_memory.get_stats()
+        recent = exp_memory.get_job_history(n=5)
+        if not recent:
+            return ""
+        lines = [f"[EXPERIMENT MEMORY] {stats.get('total_experiments', 0)} jobs on record, "
+                 f"success rate {stats.get('success_rate', 0):.0%}"]
+        for exp in recent:
+            meta = exp.get("meta", {})
+            result = exp.get("result", {})
+            t = exp.get("type", meta.get("type", "job"))
+            ts = str(exp.get("timestamp", ""))[:10]
+            score = result.get("best_score", result.get("binding_energy", result.get("energy", "")))
+            status = exp.get("status", "")
+            target = meta.get("target", "")
+            ligand = meta.get("scaffold", meta.get("smiles", ""))[:30]
+            lines.append(f"  • [{ts}] {t} | ligand={ligand} target={target} score={score} status={status}")
+        chroma = exp_memory.chroma_stats()
+        lines.append(f"  [ChromaDB: {chroma.get('backend')} — {chroma.get('total_indexed')} indexed]")
+        return "\n".join(lines)
+    except Exception as e:
+        logger.debug(f"Memory context unavailable: {e}")
+        return ""
 
 _CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "llm_config.json"
@@ -91,54 +200,12 @@ class OllamaProvider:
         except Exception:
             return False
 
-    def chat(self, prompt: str) -> str:
+    def chat(self, messages: List[Dict]) -> str:
+        """Send a pre-built messages list (system + history + user) to Ollama."""
         headers = {"Content-Type": "application/json"}
-        system_prompt = """You are BioDockify AI (NanoBot) — an autonomous drug discovery brain built into BioDockify Studio AI.
-
-IDENTITY: You are NanoBot, not a simple chatbot. You are a CrewAI-powered autonomous system with self-learning, active learning, adversarial critique, and meta-parameter optimization.
-
-ADVANCED CREWAI SYSTEM:
-You have 7 specialized AI agents coordinated by an Orchestrator:
-1. Molecular Docking Specialist — Vina/GNINA/RF with smart energy-based routing
-2. Computational Chemistry Expert — RDKit, SMILES, drug-likeness (Lipinski's Rule of 5)
-3. Pharmacophore Modeling Expert — Structure/ligand-based pharmacophores, library screening
-4. ADMET Prediction Specialist — Caco-2, BBB, CYP450, hERG, AMES, hepatotoxicity
-5. Drug Discovery Analysis Expert — Interaction analysis, consensus scoring, ranking
-6. QSAR Modeling Specialist — Descriptors, predictive modeling, Y-scrambling, SHAP
-7. Drug Discovery Orchestrator — Coordinates team, delegates, synthesizes results
-
-ADVANCED AI CAPABILITIES:
-- **Experiment Memory**: ChromaDB-backed storage tracking all experiments, failure pattern recognition, parameter tuning suggestions. Learns from every run.
-- **Meta-Parameter Self-Learning**: Learns optimal docking/MD/QSAR parameters per protein family (kinase, GPCR, protease, nuclear receptor, ion channel, enzyme). Suggests best exhaustiveness, box_size, temperature, solvent model based on historical success.
-- **Active Learning + Bayesian Optimization**: Uses Gaussian Process with Matern kernel and Expected Improvement to intelligently select next compounds for screening.
-- **Adversarial Critique Agent**: Validates all proposals with chemical plausibility checks, energy bounds validation, red flag detection, uncertainty gating (confidence thresholds).
-- **Knowledge Graph**: Integrates target, compound, pathway, and literature data for context-aware AI reasoning.
-- **NL-to-DAG Compiler**: Converts natural language requests into executable workflows with automatic error diagnosis and self-healing recovery.
-- **Critique + Uncertainty Gating**: Challenges proposals, flags chemical implausibility, enforces confidence thresholds before accepting results.
-
-5 PRE-BUILT CREW WORKFLOWS:
-- Virtual Screening Crew: Pharmacophore → Docking → Analysis → ADMET
-- Lead Optimization Crew: Chemistry → Docking → Analysis → QSAR
-- ADMET Prediction Crew: ADMET → Chemistry → Analysis
-- Docking Analysis Crew: Docking → Analysis → Consensus scoring
-- Drug Discovery Crew: Full pipeline orchestration
-
-BIOEDOCKIFY STUDIO AI FEATURES:
-- Molecular Docking (Vina, GNINA CNN, RF-Score, consensus scoring)
-- Batch Docking (GNINA 50% + LE 25% + QED 15% + diversity 10%, SQLite cache, failed GNINA fallback)
-- Pharmacophore Modeling, QSAR Modeling, ADMET Prediction
-- Molecular Dynamics (OpenMM, GPU-accelerated)
-- ChemDraw (Ketcher), Ligand Modifier (RDKit transformations)
-- 3D Viewer (3Dmol.js), RMSD Analysis, Interaction Analysis
-- Multi-language (EN/ES/ZH/AR), accessibility, dark/light themes
-
-Always introduce yourself as BioDockify AI (NanoBot). Mention your advanced AI capabilities (experiment memory, meta-learning, Bayesian optimization, critique agent) when relevant. You are a complete autonomous drug discovery brain — act like it."""
         payload = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt},
-            ],
+            "messages": messages,
             "stream": False,
         }
         response = requests.post(
@@ -209,57 +276,12 @@ class APIProvider:
             except Exception:
                 return False
 
-    def chat(self, prompt: str) -> str:
+    def chat(self, messages: List[Dict]) -> str:
+        """Send a pre-built messages list (system + history + user) to the API provider."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        messages = [
-            {
-                "role": "system",
-                "content": """You are BioDockify AI (NanoBot) — an autonomous drug discovery brain built into BioDockify Studio AI.
-
-IDENTITY: You are NanoBot, not a simple chatbot. You are a CrewAI-powered autonomous system with self-learning, active learning, adversarial critique, and meta-parameter optimization.
-
-ADVANCED CREWAI SYSTEM:
-You have 7 specialized AI agents coordinated by an Orchestrator:
-1. Molecular Docking Specialist — Vina/GNINA/RF with smart energy-based routing
-2. Computational Chemistry Expert — RDKit, SMILES, drug-likeness (Lipinski's Rule of 5)
-3. Pharmacophore Modeling Expert — Structure/ligand-based pharmacophores, library screening
-4. ADMET Prediction Specialist — Caco-2, BBB, CYP450, hERG, AMES, hepatotoxicity
-5. Drug Discovery Analysis Expert — Interaction analysis, consensus scoring, ranking
-6. QSAR Modeling Specialist — Descriptors, predictive modeling, Y-scrambling, SHAP
-7. Drug Discovery Orchestrator — Coordinates team, delegates, synthesizes results
-
-ADVANCED AI CAPABILITIES:
-- **Experiment Memory**: ChromaDB-backed storage tracking all experiments, failure pattern recognition, parameter tuning suggestions. Learns from every run.
-- **Meta-Parameter Self-Learning**: Learns optimal docking/MD/QSAR parameters per protein family (kinase, GPCR, protease, nuclear receptor, ion channel, enzyme). Suggests best exhaustiveness, box_size, temperature, solvent model based on historical success.
-- **Active Learning + Bayesian Optimization**: Uses Gaussian Process with Matern kernel and Expected Improvement to intelligently select next compounds for screening.
-- **Adversarial Critique Agent**: Validates all proposals with chemical plausibility checks, energy bounds validation, red flag detection, uncertainty gating (confidence thresholds).
-- **Knowledge Graph**: Integrates target, compound, pathway, and literature data for context-aware AI reasoning.
-- **NL-to-DAG Compiler**: Converts natural language requests into executable workflows with automatic error diagnosis and self-healing recovery.
-- **Critique + Uncertainty Gating**: Challenges proposals, flags chemical implausibility, enforces confidence thresholds before accepting results.
-
-5 PRE-BUILT CREW WORKFLOWS:
-- Virtual Screening Crew: Pharmacophore → Docking → Analysis → ADMET
-- Lead Optimization Crew: Chemistry → Docking → Analysis → QSAR
-- ADMET Prediction Crew: ADMET → Chemistry → Analysis
-- Docking Analysis Crew: Docking → Analysis → Consensus scoring
-- Drug Discovery Crew: Full pipeline orchestration
-
-BIOEDOCKIFY STUDIO AI FEATURES:
-- Molecular Docking (Vina, GNINA CNN, RF-Score, consensus scoring)
-- Batch Docking (GNINA 50% + LE 25% + QED 15% + diversity 10%, SQLite cache, failed GNINA fallback)
-- Pharmacophore Modeling, QSAR Modeling, ADMET Prediction
-- Molecular Dynamics (OpenMM, GPU-accelerated)
-- ChemDraw (Ketcher), Ligand Modifier (RDKit transformations)
-- 3D Viewer (3Dmol.js), RMSD Analysis, Interaction Analysis
-- Multi-language (EN/ES/ZH/AR), accessibility, dark/light themes
-
-Always introduce yourself as BioDockify AI (NanoBot). Mention your advanced AI capabilities (experiment memory, meta-learning, Bayesian optimization, critique agent) when relevant. You are a complete autonomous drug discovery brain — act like it.""",
-            },
-            {"role": "user", "content": prompt},
-        ]
         resp = requests.post(
             f"{self.base_url}/chat/completions",
             headers=headers,
@@ -400,24 +422,41 @@ class LLMRouter:
 
     def chat(self, message: str) -> Dict:
         """
-        Send a chat message.
-        Returns dict with: response, provider, available
+        Send a chat message as NanoBot.
+        Injects soul, experiment memory context, and conversation history.
+        Returns dict with: response, provider, available, memory_context
         """
-        # Force provider detection to initialize _api_provider
         detected = self.provider
+
+        # Build system prompt: soul + live memory context
+        memory_ctx = _build_memory_context()
+        system_content = NANOBOT_SOUL
+        if memory_ctx:
+            system_content += f"\n\n{memory_ctx}"
+
+        # Build messages: system + history + current user message
+        messages: List[Dict] = [{"role": "system", "content": system_content}]
+        messages.extend(_get_history_messages(last_n=10))
+        messages.append({"role": "user", "content": message})
+
+        # Save user turn to history
+        _append_history("user", message)
 
         # Ollama
         if detected == "ollama":
             try:
-                response_text = self.ollama.chat(message)
+                response_text = self.ollama.chat(messages)
+                _append_history("assistant", response_text)
                 return {
                     "response": response_text,
                     "provider": "ollama",
                     "available": True,
+                    "memory_context": bool(memory_ctx),
                 }
             except Exception as e:
                 logger.warning(f"Ollama failed: {e}")
                 response_text = self.offline.respond(message)
+                _append_history("assistant", response_text)
                 return {
                     "response": response_text,
                     "provider": "offline",
@@ -428,15 +467,18 @@ class LLMRouter:
         # API providers (OpenAI, DeepSeek, Groq, custom, etc.)
         if detected != "offline" and self._api_provider:
             try:
-                response_text = self._api_provider.chat(message)
+                response_text = self._api_provider.chat(messages)
+                _append_history("assistant", response_text)
                 return {
                     "response": response_text,
                     "provider": detected,
                     "available": True,
+                    "memory_context": bool(memory_ctx),
                 }
             except Exception as e:
                 logger.warning(f"{detected} failed: {e}")
                 response_text = self.offline.respond(message)
+                _append_history("assistant", response_text)
                 return {
                     "response": response_text,
                     "provider": "offline",
@@ -446,7 +488,8 @@ class LLMRouter:
 
         # Offline fallback
         response_text = self.offline.respond(message)
-        return {"response": response_text, "provider": "offline", "available": False}
+        _append_history("assistant", response_text)
+        return {"response": response_text, "provider": "offline", "available": False, "memory_context": False}
 
     def reset(self):
         """Reset provider cache and reload config"""
