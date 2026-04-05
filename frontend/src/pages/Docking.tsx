@@ -73,7 +73,7 @@ export function Docking() {
   })
   const [exhaustiveness, setExhaustiveness] = useState(32)
   const [numModes, setNumModes] = useState(10)
-  const [scoringFunction, setScoringFunction] = useState<'vina' | 'gnina' | 'rf'>('vina')
+  const [scoringFunction] = useState<'vina'>('vina')
   const [enableFlexibility, setEnableFlexibility] = useState(false)
   const [constraints, setConstraints] = useState<any[]>([])
   const [showCartoon, setShowCartoon] = useState(true)
@@ -680,15 +680,9 @@ END`
           </div>
           <div>
             <label className="text-xs text-gray-500">Scoring</label>
-            <select
-              value={scoringFunction}
-              onChange={e => setScoringFunction(e.target.value as any)}
-              className={`w-full p-2 rounded border ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300'}`}
-            >
-              <option value="vina">Vina</option>
-              <option value="gnina">GNINA</option>
-              <option value="rf">RF-Score</option>
-            </select>
+            <div className={`w-full p-2 rounded border text-sm ${isDark ? 'bg-gray-700 border-gray-600 text-gray-300' : 'bg-gray-100 border-gray-300 text-gray-600'}`}>
+              AutoDock Vina
+            </div>
           </div>
         </div>
         
@@ -1023,11 +1017,6 @@ END`
               <span className="text-sm">📐 Grid Config</span>
             </a>
           )}
-          {selectedJob?.download_urls?.gnina_log && (
-            <a href={selectedJob.download_urls.gnina_log} download className={`p-2 rounded text-center ${isDark ? 'bg-orange-900 hover:bg-orange-800' : 'bg-orange-100 hover:bg-orange-200'}`}>
-              <span className="text-sm">📄 GNINA Log</span>
-            </a>
-          )}
           {selectedJob?.download_urls?.receptor_file && (
             <a href={selectedJob.download_urls.receptor_file} download className={`p-2 rounded text-center ${isDark ? 'bg-cyan-900 hover:bg-cyan-800' : 'bg-cyan-100 hover:bg-cyan-200'}`}>
               <span className="text-sm">🔬 Receptor PDBQT</span>
@@ -1048,21 +1037,16 @@ END`
               <span className="text-sm">🧬 Vina PDBQT</span>
             </a>
           )}
-          {selectedJob?.download_urls?.gnina_docking && selectedJob.download_urls.gnina_docking !== selectedJob.download_urls.docking_file && (
-            <a href={selectedJob.download_urls.gnina_docking} download className={`p-2 rounded text-center ${isDark ? 'bg-lime-900 hover:bg-lime-800' : 'bg-lime-100 hover:bg-lime-200'}`}>
-              <span className="text-sm">🧬 GNINA PDBQT</span>
-            </a>
-          )}
           {(!selectedJob?.download_urls || Object.keys(selectedJob.download_urls).length === 0) && (
             <div className="col-span-2 text-center text-gray-500 py-2">No files available</div>
           )}
         </div>
           </div>
           
-          {/* Simulated results banner (d10) */}
+          {/* Simulated results banner */}
           {selectedJob?.engine === 'simulated' && (
             <div className="mb-4 px-3 py-2 rounded bg-yellow-900 border border-yellow-600 text-yellow-300 text-xs">
-              ⚠ Simulated results — Vina/GNINA unavailable. Scores are illustrative only.
+              ⚠ Simulated results — Vina unavailable. Scores are illustrative only.
             </div>
           )}
 
@@ -1073,16 +1057,7 @@ END`
               <thead>
                 <tr className={`text-left ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                   <th className="pb-2">#</th>
-                  <th className="pb-2">Vina</th>
-                  <th className="pb-2">GNINA</th>
-                  <th className="pb-2">RF</th>
-                  <th className="pb-2">Hydrophobic</th>
-                  <th className="pb-2">Rotatable</th>
-                  <th className="pb-2">Lipo</th>
-                  <th className="pb-2">Composite</th>
-                  {selectedJob?.results?.some((r: DockingResult) => r.constraint_penalty) && (
-                    <th className="pb-2">Constraint</th>
-                  )}
+                  <th className="pb-2">Vina Score (kcal/mol)</th>
                 </tr>
               </thead>
               <tbody>
@@ -1106,21 +1081,12 @@ END`
                     }`}
                   >
                     <td className="py-2">{r.mode}</td>
-                    <td className="py-2 font-mono">{r.vina_score?.toFixed(2)}</td>
-                    <td className="py-2 font-mono">{r.gnina_score?.toFixed(2) || '-'}</td>
-                    <td className="py-2 font-mono">{r.rf_score?.toFixed(2) || '-'}</td>
-                    <td className="py-2 font-mono">{r.hydrophobic_term?.toFixed(3) || '-'}</td>
-                    <td className="py-2 font-mono">{r.rotatable_penalty?.toFixed(3) || '-'}</td>
-                    <td className="py-2 font-mono">{r.lipo_contact?.toFixed(3) || '-'}</td>
-                    <td className="py-2 font-mono font-bold">{(r.final_score ?? r.composite_score ?? r.vina_score)?.toFixed(3)}</td>
-                    {selectedJob?.results?.some((r: DockingResult) => r.constraint_penalty) && (
-                      <td className="py-2 font-mono">{r.constraint_penalty?.toFixed(3) || '-'}</td>
-                    )}
+                    <td className="py-2 font-mono font-bold">{r.vina_score?.toFixed(2)}</td>
                   </tr>
                 ))}
                 {(!selectedJob?.results || selectedJob.results.length === 0) && (
                   <tr>
-                    <td colSpan={9} className="py-4 text-center text-gray-500">No results</td>
+                    <td colSpan={2} className="py-4 text-center text-gray-500">No results</td>
                   </tr>
                 )}
               </tbody>

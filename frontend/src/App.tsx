@@ -8,6 +8,7 @@ import { Results } from '@/pages/Results'
 import { Viewer } from '@/pages/Viewer'
 import { AIAssistant } from '@/pages/AIAssistant'
 import { Settings } from '@/pages/Settings'
+import { MoleculeDynamics } from '@/pages/MoleculeDynamics'
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/chemdraw" element={<ChemDraw />} />
           <Route path="/docking" element={<Docking />} />
+          <Route path="/md" element={<MoleculeDynamics />} />
           <Route path="/jobs" element={<JobQueue />} />
           <Route path="/results" element={<Results />} />
           <Route path="/viewer" element={<Viewer />} />
