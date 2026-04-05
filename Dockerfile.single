@@ -1,21 +1,13 @@
-# BioDockify Studio AI - Single Container v4.3.5
+# BioDockify Studio AI - Single Container v4.3.7
 # All-in-one: React frontend + FastAPI backend + RDKit + CrewAI + GPU support
+# NOTE: Build frontend locally first: cd frontend && npm run build
 
-# Stage 1: Build React frontend
-FROM node:20-alpine AS frontend-builder
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ ./
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-RUN npm run build
-
-# Stage 2: Python with RDKit and scientific packages (CUDA base for GPU)
+# Stage 1: Python with RDKit and scientific packages (CUDA base for GPU)
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 LABEL maintainer="BioDockify"
-LABEL description="BioDockify Studio AI v4.3.5 - Single container with RDKit + CrewAI + GPU"
-LABEL version="4.3.5"
+LABEL description="BioDockify Studio AI v4.3.7 - Single container with RDKit + CrewAI + GPU"
+LABEL version="4.3.7"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -62,7 +54,8 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt || true
 
 COPY backend/ /app/backend/
 
-COPY --from=frontend-builder /app/frontend/dist /app/backend/static/
+# Copy pre-built frontend (build locally first: cd frontend && npm run build)
+COPY frontend/dist/ /app/backend/static/
 
 RUN mkdir -p /app/backend/storage /app/backend/static/assets
 
