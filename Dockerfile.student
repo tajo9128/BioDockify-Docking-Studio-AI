@@ -1,0 +1,54 @@
+# BioDockify Student Edition v1.0.0
+# Lightweight CPU-only image: ~1.2 GB (was 4.38 GB)
+
+FROM python:3.11-slim
+
+LABEL maintainer="BioDockify"
+LABEL description="BioDockify Student Edition v1.0.0 - Lightweight CPU-only"
+LABEL version="1.0.0"
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Install system deps + Open Babel
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget curl bzip2 ca-certificates \
+    libglib2.0-0 libsm6 libxml2 libxslt1.1 libxrender1 libxext6 \
+    openbabel \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install AutoDock Vina CLI
+RUN wget -q https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.5/vina_1.2.5_linux_x86_64 -O /usr/local/bin/vina \
+    && chmod +x /usr/local/bin/vina
+
+# Install six first (needed by oddt's setup.py)
+RUN pip install --no-cache-dir six
+
+# Install Python deps (lightweight - no CrewAI, no ChromaDB, no CUDA)
+RUN pip install --no-cache-dir \
+    fastapi==0.109.2 \
+    uvicorn[standard]==0.27.1 \
+    python-multipart==0.0.9 \
+    pydantic==2.6.1 \
+    sqlalchemy \
+    biopython \
+    "numpy<2" \
+    requests \
+    pyyaml \
+    rdkit-pypi==2022.9.5 \
+    openbabel-wheel \
+    oddt>=0.7 \
+    scikit-learn \
+    scipy
+
+COPY backend/ /app/backend/
+COPY frontend/dist/ /app/backend/static/
+
+RUN mkdir -p /app/backend/storage /app/backend/static/assets
+
+EXPOSE 8000
+
+WORKDIR /app/backend
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

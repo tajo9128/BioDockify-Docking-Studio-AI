@@ -18,4 +18,4 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 ALLOW_AI = os.getenv("ALLOW_AI", "true").lower() == "true"
 
-OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "30"))
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "120"))
