@@ -283,7 +283,7 @@ def system_status():
                     "--format=csv,noheader",
                 ],
                 capture_output=True,
-                timeout=5,
+                timeout=120,
                 text=True,
             )
             if result.returncode == 0:
@@ -2450,7 +2450,7 @@ def get_ollama_models():
         try:
             # Strip /v1 suffix if present
             clean_url = base_url.rstrip("/").removesuffix("/v1")
-            response = requests.get(f"{clean_url}/api/tags", timeout=5)
+            response = requests.get(f"{clean_url}/api/tags", timeout=120)
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 return {
@@ -2575,7 +2575,7 @@ def llm_test(req: LLMTestRequest):
                     "stream": False,
                 },
                 headers={"Content-Type": "application/json"},
-                timeout=5,
+                timeout=120,
             )
             if response.status_code == 200:
                 data = response.json()
