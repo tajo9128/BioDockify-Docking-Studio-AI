@@ -50,7 +50,7 @@ PROVIDER_CONFIG = {
     },
     LLMProvider.OLLAMA: {
         "models": ["llama3", "llama3.1", "mistral", "codellama"],
-        "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+        "base_url": os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434/v1"),
     },
 }
 

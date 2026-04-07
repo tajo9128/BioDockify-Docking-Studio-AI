@@ -211,7 +211,7 @@ async def get_llm_settings() -> dict:
             return response.json()
     except Exception as e:
         logger.error(f"Failed to fetch LLM settings: {e}")
-        ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
+        ollama_url = os.getenv("OLLAMA_URL", "http://host.docker.internal:11434")
         return {
             "provider": "ollama",
             "model": "llama3.2",

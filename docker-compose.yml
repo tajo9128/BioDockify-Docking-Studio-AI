@@ -56,6 +56,30 @@ services:
       - docking-network
 
   # =========================================================
+  # Ollama Init - Auto-pull default model on first start
+  # =========================================================
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: docking-ollama-init
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "Waiting for Ollama to be ready..."
+        MODEL=${OLLAMA_MODEL:-llama3.2}
+        echo "Pulling model: $MODEL"
+        OLLAMA_HOST=http://ollama:11434 ollama pull $MODEL
+        echo "Model $MODEL is ready."
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - docking-network
+    restart: "no"
+
+  # =========================================================
   # Brain Service - Nanobot AI Brain (Strategist)
   # =========================================================
   brain-service:
@@ -77,6 +101,8 @@ services:
       - DATABASE_URL=postgresql://dockuser:dockpass@postgres:5432/docking
       - API_BACKEND_URL=http://api-backend:8000
       - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://ollama:11434/v1
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -86,6 +112,8 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
@@ -131,6 +159,7 @@ services:
       - SENTINEL_SERVICE_URL=http://sentinel-service:8000
       - ANALYSIS_SERVICE_URL=http://analysis-service:8000
       - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
