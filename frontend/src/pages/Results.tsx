@@ -458,16 +458,12 @@ export function Results() {
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex gap-1">
-                                {result.pdb_data && (
-                                  <button onClick={(e) => { e.stopPropagation(); setSelectedPose(result); }} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-blue-700 text-white hover:bg-blue-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}>
-                                    👁 3D
-                                  </button>
-                                )}
-                                {result.pdb_data && (
-                                  <button onClick={(e) => { e.stopPropagation(); handleDownloadPDB(result); }} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
-                                    ⬇
-                                  </button>
-                                )}
+                                <button onClick={(e) => { e.stopPropagation(); setSelectedPose(result); }} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-blue-700 text-white hover:bg-blue-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}>
+                                  👁 3D
+                                </button>
+                                <button onClick={(e) => { e.stopPropagation(); handleDownloadPDB(result); }} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                                  ⬇ PDB
+                                </button>
                               </div>
                             </td>
                           </tr>
