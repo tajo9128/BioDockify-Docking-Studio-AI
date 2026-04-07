@@ -180,8 +180,22 @@ class RMSDRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    """Enhanced health check with Ollama status"""
+    """Enhanced health check with Vina and Ollama status"""
     logger.debug("Health check requested")
+
+    # Check Vina
+    vina_status = "unavailable"
+    vina_type = None
+    try:
+        from docking_engine import check_vina, check_vina_cli
+        if check_vina():
+            vina_status = "available"
+            vina_type = "python_api"
+        elif check_vina_cli():
+            vina_status = "available"
+            vina_type = "cli"
+    except Exception as e:
+        logger.debug(f"Vina check failed: {e}")
 
     # Check Ollama with retry logic
     ollama_status = "unavailable"
@@ -206,6 +220,7 @@ def health():
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
+        "vina": {"status": vina_status, "type": vina_type},
         "ollama": {"status": ollama_status, "models": ollama_models},
     }
 
