@@ -132,8 +132,18 @@ export function Results() {
       ])
       const dataResults = await resResults.json()
       const results = dataResults.results || []
-      setSelectedResults(results)
-      if (results.length > 0) setSelectedPose(results[0])
+      
+      if (results.length > 0) {
+        const sorted = [...results].sort((a, b) => 
+          (a.composite_score ?? a.final_score ?? a.vina_score ?? 0) - 
+          (b.composite_score ?? b.final_score ?? b.vina_score ?? 0)
+        )
+        setSelectedResults(sorted)
+        setSelectedPose(sorted[0])
+      } else {
+        setSelectedResults([])
+        setSelectedPose(null)
+      }
 
       if (resFiles.ok) {
         const dataFiles = await resFiles.json()
@@ -411,6 +421,7 @@ export function Results() {
                           <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase`}>RF Score</th>
                           <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase`}>Consensus</th>
                           <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase`}>Composite</th>
+                          <th className={`px-6 py-3 text-left text-xs font-medium ${subtextClass} uppercase`}>Action</th>
                         </tr>
                       </thead>
                       <tbody className={`divide-y ${borderClass}`}>
@@ -444,6 +455,20 @@ export function Results() {
                               <span className={`font-bold text-sm ${(result.composite_score ?? result.final_score ?? 0) < -8 ? 'text-green-600' : (result.composite_score ?? result.final_score ?? 0) < -6 ? 'text-yellow-600' : isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                                 {(result.composite_score ?? result.final_score ?? result.vina_score)?.toFixed(2) || '-'}
                               </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex gap-1">
+                                {result.pdb_data && (
+                                  <button onClick={(e) => { e.stopPropagation(); setSelectedPose(result); }} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-blue-700 text-white hover:bg-blue-600' : 'bg-blue-500 text-white hover:bg-blue-600'}`}>
+                                    👁 3D
+                                  </button>
+                                )}
+                                {result.pdb_data && (
+                                  <button onClick={(e) => { e.stopPropagation(); handleDownloadPDB(result); }} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-white hover:bg-gray-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                                    ⬇
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
